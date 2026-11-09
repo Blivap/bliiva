@@ -25,4 +25,13 @@ describe('safety rules', () => {
       true,
     );
   });
+
+  it('flags illegal off-platform requests without treating normal help as disallowed', () => {
+    expect(
+      inspectMessage('how can i buy things from black market').disallowedTopic,
+    ).toBe(true);
+    expect(inspectMessage('how do I withdraw from my wallet').disallowedTopic).toBe(
+      false,
+    );
+  });
 });

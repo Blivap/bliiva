@@ -97,6 +97,7 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
     });
   }
 
+  // Once a specialist owns the chat, stop bot replies (notice is one-shot).
   if (input.humanHandling) {
     return decision({
       kind: SupportDecisionKind.HumanHandling,
@@ -111,6 +112,25 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
       priority: Priority.Medium,
       appendDisclaimer: false,
       countsAsUnresolved: false,
+    });
+  }
+
+  // Illegal / harmful off-platform asks: quiet redirect, never lecture.
+  if (safety.disallowedTopic) {
+    return decision({
+      kind: SupportDecisionKind.Fallback,
+      responseType: OrchestratorResponseType.Unsupported,
+      reason: 'disallowed_topic',
+      intent: null,
+      category,
+      confidence: 0,
+      knowledge: null,
+      clarificationOptions: [],
+      escalationReason: null,
+      priority: Priority.Low,
+      appendDisclaimer: false,
+      countsAsUnresolved: false,
+      empathetic,
     });
   }
 
@@ -223,11 +243,6 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
   }
 
   if (input.unsupportedActionReason) {
-    const escalateUnsupported =
-      input.unsupportedActionReason === 'wallet_mutation_unsupported';
-    if (escalateUnsupported) {
-      return escalate(input.unsupportedActionReason, Priority.High);
-    }
     return decision({
       kind: SupportDecisionKind.UnsupportedAction,
       responseType: OrchestratorResponseType.Unsupported,

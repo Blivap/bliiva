@@ -33,6 +33,22 @@ describe('ollama mapper', () => {
     ).toThrow(LlmError);
   });
 
+  it('falls back to thinking when content is empty', () => {
+    const response = fromOllamaChatResponse(
+      {
+        model: 'qwen3:1.7b',
+        message: {
+          role: 'assistant',
+          content: '',
+          thinking: 'Open Wallet in the app to check your balance.',
+        },
+      },
+      20,
+      'qwen3:1.7b',
+    );
+    expect(response.message.content).toContain('Wallet');
+  });
+
   it('maps loading and unavailable errors', () => {
     expect(mapOllamaError('llm server loading', 503).code).toBe(
       'model_loading',

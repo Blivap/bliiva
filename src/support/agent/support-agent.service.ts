@@ -76,10 +76,24 @@ export class SupportAgentService {
       };
     }
 
-    const retrieval = await this.rag.retrieve({
-      text: input.content,
-      category: input.category ?? undefined,
-    });
+    // Keep chat turns light: embeddings + tools thrash small Ollama hosts
+    // (chat model unload → embed load → chat reload → timeout → "Couldn't match").
+    const conversational = isConversational(input.content);
+    const useTools = input.actor.isAuthenticated && !conversational;
+    const retrieval = conversational
+      ? {
+          chunks: [],
+          durationMs: 0,
+          semanticAvailable: false,
+          embeddingMismatch: false,
+          missingEmbeddings: 0,
+          failed: false,
+        }
+      : await this.rag.retrieve({
+          text: input.content,
+          category: input.category ?? undefined,
+          keywordOnly: true,
+        });
     const chunks = retrieval.chunks.map((chunk) => ({
       ...chunk,
       content: this.rag.clip(chunk.content),
@@ -87,7 +101,9 @@ export class SupportAgentService {
 
     const messages: LlmMessage[] = [
       { role: 'system', content: buildSystemPrompt() },
-      { role: 'system', content: buildToolPrompt() },
+      ...(useTools
+        ? [{ role: 'system' as const, content: buildToolPrompt() }]
+        : []),
       {
         role: 'system',
         content: buildKnowledgePrompt(
@@ -106,7 +122,7 @@ export class SupportAgentService {
       { role: 'user', content: buildSupportTurn(redactedUser) },
     ];
 
-    const tools = this.tools.list();
+    const tools = useTools ? this.tools.list() : [];
     let toolCalls = 0;
     let promptTokens: number | null = null;
     let completionTokens: number | null = null;
@@ -147,6 +163,7 @@ export class SupportAgentService {
           if (
             chunks.length === 0 &&
             looksLikePolicyClaim(answer) &&
+            !looksLikeIdentityAnswer(answer) &&
             toolCalls === 0
           ) {
             return {
@@ -478,16 +495,34 @@ function knowledgeRefs(
 }
 
 function sanitizeAnswer(value: string): string {
-  return value
+  const cleaned = value
     .replace(/<\/?think>/gi, '')
     .replace(/\b(password|otp|access token)\s*[:=]\s*\S+/gi, '$1: [redacted]')
-    .trim()
-    .slice(0, 4000);
+    .trim();
+  // Never surface "report to authorities" lectures if the model slips.
+  if (
+    /\b(report (this )?to (the )?(appropriate )?authorities|violates? (our |platform )?polic)/i.test(
+      cleaned,
+    )
+  ) {
+    return 'I can only help with Blivap. Ask about your account, donations, blood requests, wallet, or an issue you’re facing.';
+  }
+  return cleaned.slice(0, 4000);
 }
 
 function looksLikePolicyClaim(answer: string): boolean {
   return /\b(policy|must|required|blivap|procedure|register|wallet|donation|hospital|appointment)\b/i.test(
     answer,
+  );
+}
+
+function looksLikeIdentityAnswer(answer: string): boolean {
+  return /\b(ai|assistant|bot|support)\b/i.test(answer);
+}
+
+function isConversational(text: string): boolean {
+  return /\b((what is|whats|who is) your name|who are you|what are you called|are you (an?|and)?\s*(ai|bot|robot|assistant|llm)|are you (real|human)|is this (an? )?(ai|bot)|how are you|thanks|thank you|hello|hi)\b/i.test(
+    text,
   );
 }
 

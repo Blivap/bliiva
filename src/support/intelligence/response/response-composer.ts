@@ -74,7 +74,7 @@ export function composeResponse(
       };
     case SupportDecisionKind.HumanHandling:
       return {
-        content: 'A specialist is already on this chat.',
+        content: 'A specialist is on this chat now.',
         knowledgeId: null,
         knowledgeTitle: null,
       };
@@ -126,7 +126,9 @@ export function composeResponse(
       return {
         content: join([
           empathy,
-          'Couldn’t match that. Try: account, donation, blood request, or wallet.',
+          decision.reason === 'disallowed_topic'
+            ? 'I can only help with Blivap. Ask about your account, donations, blood requests, wallet, or an issue you’re facing.'
+            : 'Couldn’t match that. Try: account, donation, blood request, or wallet.',
         ]),
         knowledgeId: null,
         knowledgeTitle: null,
@@ -200,7 +202,7 @@ export function temporaryErrorMessage(): string {
 function unsupportedActionMessage(reason: string | null | undefined): string {
   switch (reason) {
     case 'wallet_mutation_unsupported':
-      return 'I can’t move money from chat. I can show balance or escalate a dispute.';
+      return 'I can’t move money from chat. Open Wallet in the app to withdraw or transfer. I can show your balance here, or connect you to a specialist if something looks wrong.';
     case 'blood_request_cancel_unsupported':
       return 'I can’t cancel blood requests from chat. I can show status or escalate.';
     default:
@@ -211,8 +213,8 @@ function unsupportedActionMessage(reason: string | null | undefined): string {
 function greetingMessage(userName?: string | null): string {
   const name = sanitizeDisplayName(userName);
   return name
-    ? `Hi ${name} — Blivap support. How can I help?`
-    : 'Hi — Blivap support. How can I help?';
+    ? `Hi ${name} — I’m Blivap’s official AI support assistant. How can I help?`
+    : 'Hi — I’m Blivap’s official AI support assistant. How can I help?';
 }
 
 function sanitizeDisplayName(value?: string | null): string | null {

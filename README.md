@@ -155,7 +155,7 @@ User responses do not include matching scores or knowledge ids. Those are stored
 3. **Emergency.** "I have chest pain" immediately returns emergency-service guidance and opens an urgent ticket. The user is told not to wait for chat.
 4. **Clinical boundary.** "How does donor eligibility work?" returns the published explanation plus a disclaimer. "Am I eligible to donate?" is escalated and does not approve the donor.
 5. **Wallet balance.** "How much do I have in my wallet?" runs `get_wallet_summary` for the signed-in user and returns available/held amounts from Blivap.
-6. **Unsupported transfer.** "Transfer money from my wallet" is refused and escalated. No wallet mutation handlers are registered.
+6. **Wallet mutations.** "How can I withdraw my money?" explains Wallet in the app. "Transfer money from my wallet" is refused in chat (no escalation) — no wallet mutation handlers are registered.
 7. **Blood request status.** Multiple requests produce a clarification list from the user's own `GET /blood-requests/mine` data before details are shown.
 
 ## Migration

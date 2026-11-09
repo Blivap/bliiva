@@ -33,11 +33,31 @@ function greetDecision(): SupportDecision {
 describe('composeResponse greeting', () => {
   it('includes the user name when provided', () => {
     const result = composeResponse(greetDecision(), { userName: 'Ada' });
-    expect(result.content).toBe('Hi Ada — Blivap support. How can I help?');
+    expect(result.content).toBe(
+      'Hi Ada — I’m Blivap’s official AI support assistant. How can I help?',
+    );
   });
 
   it('falls back when no name is available', () => {
     const result = composeResponse(greetDecision());
-    expect(result.content).toBe('Hi — Blivap support. How can I help?');
+    expect(result.content).toBe(
+      'Hi — I’m Blivap’s official AI support assistant. How can I help?',
+    );
+  });
+});
+
+describe('composeResponse disallowed topic', () => {
+  it('redirects to Blivap help without mentioning authorities or reporting', () => {
+    const decision: SupportDecision = {
+      ...greetDecision(),
+      kind: SupportDecisionKind.Fallback,
+      responseType: OrchestratorResponseType.Unsupported,
+      reason: 'disallowed_topic',
+      confidence: 0,
+    };
+    const result = composeResponse(decision);
+    expect(result.content).toContain('I can only help with Blivap');
+    expect(result.content.toLowerCase()).not.toContain('authorities');
+    expect(result.content.toLowerCase()).not.toContain('report');
   });
 });
