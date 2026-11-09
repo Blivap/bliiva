@@ -72,12 +72,13 @@ describe('RetrievalService', () => {
   });
 
   it('falls back to keywords when embeddings fail', async () => {
+    const search = vi.fn();
     const store: VectorStore = {
       replaceDocument: vi.fn(),
       markStatus: vi.fn(),
       listDocument: vi.fn(),
       listPublished: vi.fn(async () => [chunk()]),
-      search: vi.fn(),
+      search,
     };
     const embeddings = {
       model: 'nomic-embed-text',
@@ -89,7 +90,7 @@ describe('RetrievalService', () => {
     const hit = await service.retrieve({ text: 'donor registration' });
     expect(hit.semanticAvailable).toBe(false);
     expect(hit.chunks).toHaveLength(1);
-    expect(store.search).not.toHaveBeenCalled();
+    expect(search).not.toHaveBeenCalled();
   });
 
   it('flags an embedding model mismatch when semantic search is empty', async () => {

@@ -593,8 +593,7 @@ export class SupportOrchestratorService {
     }
 
     // Never block the reply on a profile round-trip — greet instantly from cache.
-    const userName: string | null =
-      context.recognizedEntities.userName ?? null;
+    const userName: string | null = context.recognizedEntities.userName ?? null;
     if (
       decision.kind === SupportDecisionKind.Greet &&
       !userName &&
@@ -1143,7 +1142,7 @@ export class SupportOrchestratorService {
       escalationReason: input.decision?.escalationReason ?? null,
       ticketNumber: input.reference,
       ...(input.suppressBotMessage ? { silent: true } : {}),
-      ...(input.extraMetadata ?? {}),
+      ...input.extraMetadata,
     };
     const bot = input.suppressBotMessage
       ? null
@@ -1227,7 +1226,9 @@ export class SupportOrchestratorService {
       content: input.content,
       reference: input.reference,
       message: {
-        id: bot ? String(bot._id) : `silent:${conversation.id}:${createdAt.getTime()}`,
+        id: bot
+          ? String(bot._id)
+          : `silent:${conversation.id}:${createdAt.getTime()}`,
         senderType: MessageSenderType.Bot,
         content: input.content,
         messageType: MessageType.Text,

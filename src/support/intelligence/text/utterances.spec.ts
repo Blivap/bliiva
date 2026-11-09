@@ -20,9 +20,9 @@ describe('detectUtterance greeting', () => {
   });
 
   it('does not treat support questions as greetings', () => {
-    expect(detectUtterance(normalizeText('how are you eligible')).greeting).toBe(
-      false,
-    );
+    expect(
+      detectUtterance(normalizeText('how are you eligible')).greeting,
+    ).toBe(false);
   });
 
   it('strips a greeting prefix so the real question can be recognized', () => {

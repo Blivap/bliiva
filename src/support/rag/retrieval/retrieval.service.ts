@@ -68,8 +68,7 @@ export class RetrievalService {
 
       let semantic: RetrievedChunk[] = [];
       let semanticAvailable = false;
-      const allowSemantic =
-        !query.keywordOnly && rag.semanticWeight > 0;
+      const allowSemantic = !query.keywordOnly && rag.semanticWeight > 0;
       if (allowSemantic) {
         try {
           const [vector] = await this.embeddings.embed([query.text]);
