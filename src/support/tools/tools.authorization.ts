@@ -13,7 +13,11 @@ export function authorizeToolCall(
   for (const key of IDENTITY_KEYS) {
     const claimed = args[key];
     if (claimed == null || claimed === '') continue;
-    if (String(claimed) !== String(actor.userId ?? '')) {
+    const claimedId =
+      typeof claimed === 'string' || typeof claimed === 'number'
+        ? String(claimed)
+        : null;
+    if (claimedId == null || claimedId !== (actor.userId ?? '')) {
       return {
         ok: false,
         code: 'cross_user',

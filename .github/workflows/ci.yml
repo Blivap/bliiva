@@ -113,7 +113,8 @@ jobs:
 
       - name: Check health
         run: |
-          body="$(curl -fsS http://127.0.0.1:3000/api/v1/health)"
+          # docker-compose.yml maps the API as host 3100 → container 3000
+          body="$(curl -fsS http://127.0.0.1:3100/api/v1/health)"
           printf '%s\n' "$body"
           node --input-type=module -e "
             const body = JSON.parse(process.argv[1]);

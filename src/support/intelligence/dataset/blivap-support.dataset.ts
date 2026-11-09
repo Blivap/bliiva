@@ -399,7 +399,8 @@ export const blivapIntents: IntentDefinition[] = [
   },
   {
     name: 'WALLET_WITHDRAW_HELP',
-    description: 'The user asks how to withdraw, cash out, or move wallet funds.',
+    description:
+      'The user asks how to withdraw, cash out, or move wallet funds.',
     category: 'wallet_transactions',
     keywords: ['withdraw', 'withdrawal', 'payout', 'cash'],
     phrases: [

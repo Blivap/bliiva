@@ -75,7 +75,10 @@ export class MongodbVectorStore implements VectorStore {
       .lean()
       .exec();
     return documents.map((document) =>
-      toRetrieved(fromDocument({ ...document, embedding: [] }), 0),
+      toRetrieved(
+        fromDocument(Object.assign({}, document, { embedding: [] })),
+        0,
+      ),
     );
   }
 }

@@ -30,8 +30,8 @@ describe('safety rules', () => {
     expect(
       inspectMessage('how can i buy things from black market').disallowedTopic,
     ).toBe(true);
-    expect(inspectMessage('how do I withdraw from my wallet').disallowedTopic).toBe(
-      false,
-    );
+    expect(
+      inspectMessage('how do I withdraw from my wallet').disallowedTopic,
+    ).toBe(false);
   });
 });

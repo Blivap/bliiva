@@ -125,15 +125,15 @@ export class QdrantVectorStore implements VectorStore {
     return (body.result?.points ?? []).map((point) => {
       const payload = point.payload ?? {};
       return {
-        id: String(payload.recordId ?? ''),
-        documentId: String(payload.documentId ?? ''),
-        title: String(payload.title ?? ''),
-        category: String(payload.category ?? ''),
+        id: payloadString(payload.recordId),
+        documentId: payloadString(payload.documentId),
+        title: payloadString(payload.title),
+        category: payloadString(payload.category),
         version: Number(payload.version ?? 1),
         chunkIndex: Number(payload.chunkIndex ?? 0),
-        content: String(payload.content ?? ''),
+        content: payloadString(payload.content),
         score: Number(point.score ?? 0),
-        embeddingModel: String(payload.embeddingModel ?? ''),
+        embeddingModel: payloadString(payload.embeddingModel),
       };
     });
   }
@@ -168,21 +168,21 @@ export class QdrantVectorStore implements VectorStore {
     return (body.result?.points ?? []).map((point) => {
       const payload = point.payload ?? {};
       const record: VectorRecord = {
-        id: String(payload.recordId ?? ''),
-        content: String(payload.content ?? ''),
+        id: payloadString(payload.recordId),
+        content: payloadString(payload.content),
         embedding: [],
         metadata: {
-          documentId: String(payload.documentId ?? ''),
-          title: String(payload.title ?? ''),
-          category: String(payload.category ?? ''),
+          documentId: payloadString(payload.documentId),
+          title: payloadString(payload.title),
+          category: payloadString(payload.category),
           version: Number(payload.version ?? 1),
           status: 'published',
           chunkIndex: Number(payload.chunkIndex ?? 0),
           createdAt: new Date(),
           source: payload.source === 'submission' ? 'submission' : 'knowledge',
-          embeddingModel: String(payload.embeddingModel ?? ''),
+          embeddingModel: payloadString(payload.embeddingModel),
           embeddingDimensions: Number(payload.embeddingDimensions ?? 0),
-          contentHash: String(payload.contentHash ?? ''),
+          contentHash: payloadString(payload.contentHash),
         },
       };
       return toRetrieved(record, 0);
@@ -243,4 +243,12 @@ export class QdrantVectorStore implements VectorStore {
 
 function pointId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+}
+
+function payloadString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return '';
 }
