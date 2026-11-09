@@ -9,6 +9,7 @@
  * reviewed starter set.
  *
  * Imports the compiled Nest output under dist/ so Node can resolve .js paths.
+ * Excluded from `yarn typecheck` (see tsconfig.json) because dist/ exists only after build.
  */
 import mongoose from 'mongoose';
 import { SUPPORT_COLLECTIONS } from '../dist/common/constants/collection-names.js';
