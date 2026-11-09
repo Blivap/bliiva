@@ -1,0 +1,270 @@
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the published image to production
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  IMAGE_NAME: bliiva
+
+jobs:
+  verify:
+    name: Lint, test, and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Check formatting
+        run: yarn format:check
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      - name: Unit tests
+        run: yarn test:cov
+
+      - name: End-to-end tests
+        run: yarn test:e2e
+
+      - name: Build
+        run: yarn build
+
+      - name: Dependency audit
+        run: yarn audit --groups dependencies --level high
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage
+          retention-days: 7
+          if-no-files-found: ignore
+
+  image:
+    name: Image build and smoke test
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:ci
+          cache-from: type=gha,scope=bliiva
+          cache-to: type=gha,scope=bliiva,mode=max
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:ci
+          format: table
+          exit-code: '1'
+          severity: CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Prepare runtime env
+        run: cp .env.example .env
+
+      - name: Boot the stack from the image
+        run: |
+          docker tag "${IMAGE_NAME}:ci" "${IMAGE_NAME}:local"
+          docker compose up -d --no-build --wait --wait-timeout 180
+
+      - name: Check health
+        run: |
+          body="$(curl -fsS http://127.0.0.1:3000/api/v1/health)"
+          printf '%s\n' "$body"
+          node --input-type=module -e "
+            const body = JSON.parse(process.argv[1]);
+            const data = body.data ?? {};
+            if (body.success !== true || data.status !== 'ok' || data.mongo !== 'up' || data.redis !== 'up') {
+              console.error('Health check did not report mongo and redis up');
+              process.exit(1);
+            }
+          " "$body"
+
+      - name: Show logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  publish:
+    name: Publish image
+    needs: image
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Image name
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=bliiva
+          cache-to: type=gha,scope=bliiva,mode=max
+
+      - name: Record immutable reference
+        id: ref
+        run: echo "image=${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy production
+    needs: publish
+    if: needs.publish.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.deploy))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: bliiva-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check deploy configuration
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          missing=0
+          [ -n "$HOST" ] || { echo "::error::Missing secret DEPLOY_HOST"; missing=1; }
+          [ -n "$USER" ] || { echo "::error::Missing secret DEPLOY_USER"; missing=1; }
+          [ -n "$KEY" ] || { echo "::error::Missing secret DEPLOY_SSH_KEY"; missing=1; }
+          [ -n "$KNOWN" ] || { echo "::error::Missing secret DEPLOY_KNOWN_HOSTS"; missing=1; }
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Add the deploy secrets and a production environment reviewer, then re-run."
+            exit 1
+          fi
+
+      - name: Deploy the published image
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          IMAGE: ${{ needs.publish.outputs.image }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          port="${PORT:-22}"
+          install -m 700 -d ~/.ssh
+          if [[ "$KEY" != *$'\n'* ]]; then KEY="${KEY//\\n/$'\n'}"; fi
+          if [[ "$KNOWN" != *$'\n'* ]]; then KNOWN="${KNOWN//\\n/$'\n'}"; fi
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+
+          common=(-i "$HOME/.ssh/deploy_key" -o UserKnownHostsFile="$HOME/.ssh/known_hosts")
+          scp "${common[@]}" -P "$port" docker-compose.prod.yml "${USER}@${HOST}:/tmp/bliiva-docker-compose.prod.yml"
+          ssh "${common[@]}" -p "$port" "${USER}@${HOST}" \
+            "IMAGE=$(printf '%q' "$IMAGE") GHCR_USER=$(printf '%q' "$GHCR_USER") GHCR_TOKEN=$(printf '%q' "$GHCR_TOKEN") bash -s" <<'REMOTE'
+          set -euo pipefail
+          install -d -m 755 /opt/bliiva
+          mv /tmp/bliiva-docker-compose.prod.yml /opt/bliiva/docker-compose.prod.yml
+          if [[ ! -f /opt/bliiva/.env ]]; then
+            echo "Create /opt/bliiva/.env before deploying"
+            exit 1
+          fi
+          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          cd /opt/bliiva
+          BLIIVA_IMAGE="$IMAGE" docker compose -f docker-compose.prod.yml pull api
+          BLIIVA_IMAGE="$IMAGE" docker compose -f docker-compose.prod.yml up -d --wait --wait-timeout 180 --remove-orphans
+          docker logout ghcr.io
+          docker image prune -f
+          REMOTE

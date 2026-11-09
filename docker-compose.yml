@@ -1,0 +1,92 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - bliiva_mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: bliiva_support
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - bliiva_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  api:
+    image: bliiva:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - '3100:3000'
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      # Container loopback is not the host Ollama. Use the compose service DNS.
+      LLM_BASE_URL: http://ollama:11434
+      MONGODB_URI: mongodb://mongo:27017/bliiva_support
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 1
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/v1/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  # Optional local inference. Do not publish 11434 beyond the developer machine.
+  # Usage: docker compose --profile llm up -d
+  # Then: docker compose exec ollama ollama pull qwen3:1.7b
+  #        docker compose exec ollama ollama pull nomic-embed-text
+  ollama:
+    profiles: ['llm']
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:11434:11434'
+    volumes:
+      - ${OLLAMA_DATA:-bliiva_ollama_data}:/root/.ollama
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  bliiva_mongo_data:
+  bliiva_redis_data:
+  bliiva_ollama_data:

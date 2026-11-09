@@ -1,0 +1,95 @@
+# Production stack. The image is published by CI; this file does not build it.
+# Place a private .env next to this file on the server. It is never copied by deploy.
+# Required at runtime: SUPPORT_SERVICE_API_KEY, and OBSERVE_APP_KEY / OBSERVE_APP_SECRET
+# when telemetry should leave the box. MongoDB and Redis stay on the internal network.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - bliiva_mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: bliiva_support
+    networks:
+      - bliiva
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - bliiva_redis_data:/data
+    networks:
+      - bliiva
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  api:
+    image: ${BLIIVA_IMAGE:?Set BLIIVA_IMAGE to the published ghcr.io image}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    ports:
+      - '2002:2002'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongo:27017/bliiva_support
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      REDIS_DB: '1'
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bliiva
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/'+(process.env.API_PREFIX||'api/v1')+'/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+volumes:
+  bliiva_mongo_data:
+  bliiva_redis_data:
+
+networks:
+  bliiva:

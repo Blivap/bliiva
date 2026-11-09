@@ -1,0 +1,15 @@
+export const SUPPORT_COLLECTIONS = {
+  conversations: 'support_conversations',
+  messages: 'support_messages',
+  knowledge: 'support_knowledge',
+  intents: 'support_intents',
+  tickets: 'support_tickets',
+  agents: 'support_agents',
+  assignments: 'support_assignments',
+  feedback: 'support_feedback',
+  auditLogs: 'support_audit_logs',
+  actionLogs: 'support_action_logs',
+  intelligenceEvents: 'support_intelligence_events',
+  knowledgeChunks: 'support_knowledge_chunks',
+  llmEvents: 'support_llm_events',
+} as const;

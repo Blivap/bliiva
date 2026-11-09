@@ -1,0 +1,1 @@
+export const BLIVAP_INTEGRATION = Symbol('BLIVAP_INTEGRATION');
