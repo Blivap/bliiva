@@ -38,6 +38,8 @@ export interface ConversationContextState {
   pendingActionName: string | null;
   pendingActionParams: Record<string, string>;
   pendingConfirmationId: string | null;
+  /** True after the user has been told a specialist is taking over. */
+  specialistNotified: boolean;
 }
 
 export function emptyContext(): ConversationContextState {
@@ -59,6 +61,7 @@ export function emptyContext(): ConversationContextState {
     pendingActionName: null,
     pendingActionParams: {},
     pendingConfirmationId: null,
+    specialistNotified: false,
   };
 }
 
@@ -88,6 +91,7 @@ export function readContext(raw: unknown): ConversationContextState {
     pendingActionName: stringOrNull(record.pendingActionName),
     pendingActionParams: readEntities(record.pendingActionParams),
     pendingConfirmationId: stringOrNull(record.pendingConfirmationId),
+    specialistNotified: record.specialistNotified === true,
   };
 }
 

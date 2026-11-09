@@ -174,12 +174,18 @@ export class SupportOrchestratorService {
     const utterance = detectUtterance(normalized);
     const safety = this.safety.inspect(content);
     const closed = conversation.status === ConversationStatus.Closed;
-    const humanHandling =
-      conversation.status === ConversationStatus.Human ||
-      conversation.status === ConversationStatus.Waiting;
+    // Waiting = ticket queued; keep answering. Only mute when a human is live.
+    const humanHandling = conversation.status === ConversationStatus.Human;
     const repeatCount = nextRepeatCount(context, normalized);
     const intents = await this.catalog.getEnabled();
     const pending = resolvePendingReply(context, normalized, utterance);
+
+    const focusText =
+      utterance.correction && utterance.correctionRemainder
+        ? utterance.correctionRemainder
+        : utterance.greetingRemainder
+          ? utterance.greetingRemainder
+          : content;
 
     let recognition = await this.recognizeTurn(
       content,
@@ -215,7 +221,7 @@ export class SupportOrchestratorService {
     }
 
     const knowledge = await this.retrieval.retrieve({
-      text: content,
+      text: focusText,
       intent: recognition.intent,
       category: recognition.category,
       preferredKnowledgeId,
@@ -240,7 +246,7 @@ export class SupportOrchestratorService {
     } else if (!pendingRejectConfirm) {
       const resolved = this.actionResolver.resolve({
         intent: recognition.intent,
-        message: content,
+        message: focusText,
         params: actionParams,
       });
       if (resolved && 'unsupported' in resolved) {
@@ -273,11 +279,21 @@ export class SupportOrchestratorService {
       unsupportedActionReason,
     });
 
+    // Keep safety/known answers instant. Let the LLM try only when the
+    // rules engine is unsure (Fallback / Clarify). Never let the model
+    // lecture on disallowed topics — redirect is locked.
     const locked =
       baseDecision.kind === SupportDecisionKind.Emergency ||
       baseDecision.kind === SupportDecisionKind.Escalate ||
       baseDecision.kind === SupportDecisionKind.HumanHandling ||
-      baseDecision.kind === SupportDecisionKind.ClosedConversation;
+      baseDecision.kind === SupportDecisionKind.ClosedConversation ||
+      baseDecision.kind === SupportDecisionKind.Greet ||
+      baseDecision.kind === SupportDecisionKind.Close ||
+      baseDecision.kind === SupportDecisionKind.UnsupportedAction ||
+      baseDecision.kind === SupportDecisionKind.Authenticate ||
+      baseDecision.kind === SupportDecisionKind.Answer ||
+      baseDecision.kind === SupportDecisionKind.RunAction ||
+      baseDecision.reason === 'disallowed_topic';
     const pendingActionFlow =
       pendingConfirm || pendingRejectConfirm || pendingResource;
     if (
@@ -576,12 +592,53 @@ export class SupportOrchestratorService {
       status = ConversationStatus.Bot;
     }
 
-    let userName: string | null = context.recognizedEntities.userName ?? null;
-    if (decision.kind === SupportDecisionKind.Greet && !userName) {
-      userName = await this.resolveUserName(actor);
+    // Never block the reply on a profile round-trip — greet instantly from cache.
+    const userName: string | null =
+      context.recognizedEntities.userName ?? null;
+    if (
+      decision.kind === SupportDecisionKind.Greet &&
+      !userName &&
+      actor.isAuthenticated
+    ) {
+      void this.warmUserName(conversation.id, actor);
     }
-    const composed = composeResponse(decision, { ticketQueued, userName });
-    const contentOut = actionContent ?? composed.content;
+    const suppressBotMessage =
+      decision.kind === SupportDecisionKind.HumanHandling &&
+      context.specialistNotified;
+    const composed = suppressBotMessage
+      ? { content: '', knowledgeId: null, knowledgeTitle: null }
+      : composeResponse(decision, { ticketQueued, userName });
+    const contentOut = suppressBotMessage
+      ? ''
+      : (actionContent ?? composed.content);
+
+    // Silent internal report — never tell the user we reported anything.
+    if (decision.reason === 'disallowed_topic') {
+      void this.audit
+        .createAudit({
+          action: 'support.disallowed_topic',
+          resourceType: 'conversation',
+          resourceId: Types.ObjectId.isValid(conversation.id)
+            ? new Types.ObjectId(conversation.id)
+            : null,
+          actorId: actor.userId ? new Types.ObjectId(actor.userId) : null,
+          actorType: actor.isAuthenticated ? 'user' : 'guest',
+          metadata: {
+            conversationId: conversation.id,
+            reasons: safety.reasons,
+            preview: content.slice(0, 200),
+          },
+        })
+        .catch((error: unknown) => {
+          this.logger.warn(
+            JSON.stringify({
+              event: 'support.disallowed_topic.audit_failed',
+              conversationId: conversation.id,
+              message: error instanceof Error ? error.message : 'unknown',
+            }),
+          );
+        });
+    }
     const entityPatch = {
       ...recognition.entities,
       ...(userName ? { userName } : {}),
@@ -604,7 +661,7 @@ export class SupportOrchestratorService {
           previousIntent: context.currentIntent,
           lastUserMessage: content,
           lastUserMessageNormalized: normalized,
-          lastBotResponse: contentOut,
+          lastBotResponse: contentOut || context.lastBotResponse,
           recognizedEntities: {
             ...context.recognizedEntities,
             ...entityPatch,
@@ -638,6 +695,7 @@ export class SupportOrchestratorService {
       lowScore: Boolean(decision.knowledge && decision.knowledge.score < 0.5),
       knowledgeId: composed.knowledgeId,
       knowledgeTitle: composed.knowledgeTitle,
+      suppressBotMessage,
     });
   }
 
@@ -675,12 +733,36 @@ export class SupportOrchestratorService {
       confirmationId: context.pendingConfirmationId ?? undefined,
     });
     await this.recordLlmAnalytics(conversation.id, result);
+    if (result.outcome === 'fallback') {
+      return null;
+    }
+    // Timeouts / Ollama reloads used to disappear into "Couldn't match that".
+    // Surface a temporary error so the user can retry once the model is warm.
     if (
-      result.outcome === 'fallback' ||
       result.outcome === 'unavailable' ||
       result.outcome === 'temporary_error'
     ) {
-      return null;
+      return this.finish(conversation, {
+        responseType: OrchestratorResponseType.TemporaryError,
+        content: temporaryErrorMessage(),
+        reference: null,
+        decision: null,
+        recognition: null,
+        context,
+        status: conversation.status,
+        category: conversation.category,
+        priority: conversation.priority,
+        assignedAgentId: conversation.assignedAgentId,
+        started: Date.now(),
+        userText: content,
+        safetyRedact: false,
+        lowScore: false,
+        extraMetadata: {
+          reason: result.reason,
+          errorCode: result.errorCode,
+          model: result.model,
+        },
+      });
     }
 
     let status = conversation.status;
@@ -825,6 +907,39 @@ export class SupportOrchestratorService {
     }
   }
 
+  private async warmUserName(
+    conversationId: string,
+    actor: SupportActor,
+  ): Promise<void> {
+    const name = await this.resolveUserName(actor);
+    if (!name) return;
+    try {
+      const conversation = await this.conversations.findById(conversationId);
+      if (!conversation) return;
+      const context = readContext(
+        (conversation.context ?? {}) as Record<string, unknown>,
+      );
+      if (context.recognizedEntities.userName) return;
+      await this.conversations.updateById(conversationId, {
+        context: {
+          ...context,
+          recognizedEntities: {
+            ...context.recognizedEntities,
+            userName: name,
+          },
+        },
+      });
+    } catch (error) {
+      this.logger.debug(
+        JSON.stringify({
+          event: 'support.greeting.name_cache_failed',
+          conversationId,
+          message: error instanceof Error ? error.message : 'unknown',
+        }),
+      );
+    }
+  }
+
   private async resolveUserName(actor: SupportActor): Promise<string | null> {
     if (
       !this.blivap ||
@@ -888,7 +1003,9 @@ export class SupportOrchestratorService {
     const text =
       utterance.correction && utterance.correctionRemainder
         ? utterance.correctionRemainder
-        : content;
+        : utterance.greetingRemainder
+          ? utterance.greetingRemainder
+          : content;
     return this.recognizer.recognize(text, {
       currentIntent: context.currentIntent,
       correction: utterance.correction,
@@ -960,6 +1077,12 @@ export class SupportOrchestratorService {
       conversationState = 'idle';
     }
 
+    const specialistNotified =
+      state.specialistNotified ||
+      decision.kind === SupportDecisionKind.Escalate ||
+      decision.kind === SupportDecisionKind.Emergency ||
+      decision.kind === SupportDecisionKind.HumanHandling;
+
     return {
       ...emptyContext(),
       ...state,
@@ -967,7 +1090,7 @@ export class SupportOrchestratorService {
       currentIntent: decision.intent ?? state.currentIntent,
       lastUserMessage: content,
       lastUserMessageNormalized: normalized,
-      lastBotResponse: response,
+      lastBotResponse: response || state.lastBotResponse,
       lastClarificationQuestion:
         decision.kind === SupportDecisionKind.Clarify
           ? response
@@ -979,6 +1102,7 @@ export class SupportOrchestratorService {
       presentedKnowledgeIds: presented,
       frustrated: frustrated || state.frustrated,
       repeatCount,
+      specialistNotified,
       version: 1,
     };
   }
@@ -1003,6 +1127,7 @@ export class SupportOrchestratorService {
       knowledgeId?: string | null;
       knowledgeTitle?: string | null;
       extraMetadata?: Record<string, unknown>;
+      suppressBotMessage?: boolean;
     },
   ): Promise<OrchestratorTurn> {
     const metadata: Record<string, unknown> = {
@@ -1017,18 +1142,21 @@ export class SupportOrchestratorService {
       matchedPhrases: input.recognition?.matchedPhrases ?? [],
       escalationReason: input.decision?.escalationReason ?? null,
       ticketNumber: input.reference,
+      ...(input.suppressBotMessage ? { silent: true } : {}),
       ...(input.extraMetadata ?? {}),
     };
-    const bot = await this.messages.create({
-      conversationId: new Types.ObjectId(conversation.id),
-      senderType: MessageSenderType.Bot,
-      senderId: null,
-      content: input.content,
-      messageType: MessageType.Text,
-      intent: input.decision?.intent ?? null,
-      confidence: input.decision?.confidence ?? null,
-      metadata,
-    });
+    const bot = input.suppressBotMessage
+      ? null
+      : await this.messages.create({
+          conversationId: new Types.ObjectId(conversation.id),
+          senderType: MessageSenderType.Bot,
+          senderId: null,
+          content: input.content,
+          messageType: MessageType.Text,
+          intent: input.decision?.intent ?? null,
+          confidence: input.decision?.confidence ?? null,
+          metadata,
+        });
     const updated = await this.conversations.updateById(conversation.id, {
       status: input.status,
       category: input.category,
@@ -1085,10 +1213,13 @@ export class SupportOrchestratorService {
         intent: decision?.intent ?? null,
         category: input.category,
         latencyMs,
+        silent: Boolean(input.suppressBotMessage),
       }),
     );
 
-    const createdAtValue = (bot as { createdAt?: Date }).createdAt;
+    const createdAtValue = bot
+      ? (bot as { createdAt?: Date }).createdAt
+      : undefined;
     const createdAt =
       createdAtValue instanceof Date ? createdAtValue : new Date();
     return {
@@ -1096,7 +1227,7 @@ export class SupportOrchestratorService {
       content: input.content,
       reference: input.reference,
       message: {
-        id: String(bot._id),
+        id: bot ? String(bot._id) : `silent:${conversation.id}:${createdAt.getTime()}`,
         senderType: MessageSenderType.Bot,
         content: input.content,
         messageType: MessageType.Text,

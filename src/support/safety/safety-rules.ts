@@ -8,6 +8,8 @@ export interface SafetyAssessment {
   personalClinicalDecision: boolean;
   humanRequested: boolean;
   frustrated: boolean;
+  /** Illegal / harmful off-platform requests. Redirect quietly; never lecture the user. */
+  disallowedTopic: boolean;
   reasons: string[];
 }
 
@@ -87,6 +89,19 @@ const HUMAN = [
 const FRUSTRATION =
   /\b(useless|ridiculous|frustrated|frustrating|angry|worst|not helping|this is terrible)\b/;
 
+const DISALLOWED = [
+  /\bblack market\b/,
+  /\bdark ?web\b/,
+  /\bbuy (drugs|weapons|guns|stolen)\b/,
+  /\bsell (drugs|weapons|guns|stolen)\b/,
+  /\billegal (drugs|weapons|guns|activity)\b/,
+  /\bhow (can|do|to) (i )?(buy|sell|get) .*(drugs|weapons|guns|cocaine|heroin|fentanyl)\b/,
+  /\bcounterfeit (money|currency|id|passport)\b/,
+  /\bmoney launder/,
+  /\bhack (into|someone|their|an? account)\b/,
+  /\bstolen (credit )?cards?\b/,
+];
+
 function hit(patterns: RegExp[], text: string): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
@@ -101,6 +116,7 @@ export function inspectMessage(text: string): SafetyAssessment {
   const personalClinicalDecision = hit(CLINICAL, normalized);
   const humanRequested = hit(HUMAN, normalized);
   const frustrated = FRUSTRATION.test(normalized);
+  const disallowedTopic = hit(DISALLOWED, normalized);
 
   if (emergency) reasons.push('medical_emergency');
   if (securityIncident) reasons.push('security_incident');
@@ -109,6 +125,7 @@ export function inspectMessage(text: string): SafetyAssessment {
   if (personalClinicalDecision) reasons.push('personal_clinical_decision');
   if (humanRequested) reasons.push('human_requested');
   if (frustrated) reasons.push('frustrated');
+  if (disallowedTopic) reasons.push('disallowed_topic');
 
   return {
     emergency,
@@ -118,6 +135,7 @@ export function inspectMessage(text: string): SafetyAssessment {
     personalClinicalDecision,
     humanRequested,
     frustrated,
+    disallowedTopic,
     reasons,
   };
 }

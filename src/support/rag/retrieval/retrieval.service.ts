@@ -10,6 +10,8 @@ import { hybridRank, keywordScore } from './hybrid-rank.js';
 export interface RagQuery {
   text: string;
   category?: string;
+  /** Skip embedding calls (avoids thrashing chat/embed models on small hosts). */
+  keywordOnly?: boolean;
 }
 
 export interface RagHit {
@@ -66,24 +68,28 @@ export class RetrievalService {
 
       let semantic: RetrievedChunk[] = [];
       let semanticAvailable = false;
-      try {
-        const [vector] = await this.embeddings.embed([query.text]);
-        semantic = await this.store.search({
-          embedding: vector,
-          embeddingModel: model,
-          topK: rag.topK,
-          minScore: 0,
-          category: query.category,
-          maxCandidates: rag.maxCandidates,
-        });
-        semanticAvailable = true;
-      } catch (error) {
-        this.logger.warn(
-          JSON.stringify({
-            event: 'support.rag.semantic_failed',
-            message: error instanceof Error ? error.message : 'unknown',
-          }),
-        );
+      const allowSemantic =
+        !query.keywordOnly && rag.semanticWeight > 0;
+      if (allowSemantic) {
+        try {
+          const [vector] = await this.embeddings.embed([query.text]);
+          semantic = await this.store.search({
+            embedding: vector,
+            embeddingModel: model,
+            topK: rag.topK,
+            minScore: 0,
+            category: query.category,
+            maxCandidates: rag.maxCandidates,
+          });
+          semanticAvailable = true;
+        } catch (error) {
+          this.logger.warn(
+            JSON.stringify({
+              event: 'support.rag.semantic_failed',
+              message: error instanceof Error ? error.message : 'unknown',
+            }),
+          );
+        }
       }
 
       const chunks = hybridRank({

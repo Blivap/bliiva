@@ -59,6 +59,8 @@ function harness() {
 
   const orchestrator = new SupportOrchestratorService(
     {
+      findById: async (conversationId: string) =>
+        conversations.get(String(conversationId)) ?? null,
       updateById: async (
         conversationId: string,
         patch: Record<string, unknown>,
@@ -180,11 +182,57 @@ function harness() {
 }
 
 describe('support orchestrator', () => {
-  it('greets a signed-in user by their first name', async () => {
+  it('greets immediately without waiting on profile lookup', async () => {
     const { orchestrator, conversation } = harness();
     const turn = await orchestrator.process(conversation, 'hi', user);
-    expect(turn.content).toContain('Hi Ada');
-    expect(turn.content).toContain('Blivap support');
+    expect(turn.content).toMatch(
+      /^Hi — I’m Blivap’s official AI support assistant/,
+    );
+  });
+
+  it('uses a cached display name on greeting when already known', async () => {
+    const { orchestrator, conversation } = harness();
+    conversation.context = {
+      recognizedEntities: { userName: 'Ada' },
+    };
+    const turn = await orchestrator.process(conversation, 'hello', user);
+    expect(turn.content).toBe(
+      'Hi Ada — I’m Blivap’s official AI support assistant. How can I help?',
+    );
+  });
+
+  it('answers a compound greeting without falling back', async () => {
+    const { orchestrator, conversation } = harness();
+    const turn = await orchestrator.process(
+      conversation,
+      "hello what's your name",
+      user,
+    );
+    expect(turn.content).toMatch(/official AI support assistant/);
+    expect(turn.content).not.toContain('Couldn’t match');
+  });
+
+  it('answers are-you-ai chitchat without the fallback phrase', async () => {
+    const { orchestrator, conversation } = harness();
+    const turn = await orchestrator.process(
+      conversation,
+      'hi are you and ai ?',
+      user,
+    );
+    expect(turn.content).toMatch(/official AI support assistant/);
+    expect(turn.content).not.toContain('Couldn’t match');
+  });
+
+  it('explains withdrawals instead of escalating to a specialist', async () => {
+    const { orchestrator, conversation, escalations } = harness();
+    const turn = await orchestrator.process(
+      conversation,
+      'please how can i withdraw my money',
+      user,
+    );
+    expect(turn.content.toLowerCase()).toMatch(/withdraw|wallet/);
+    expect(turn.content).not.toContain('A specialist will continue');
+    expect(escalations).toHaveLength(0);
   });
 
   it('answers a password question from the approved article and traces it internally', async () => {
@@ -248,6 +296,26 @@ describe('support orchestrator', () => {
     );
     expect(human.content.toLowerCase()).toContain('human');
     expect(human.reference).toBe('SUP-TEST-1000');
+  });
+
+  it('notifies once when a specialist owns the chat, then stays silent', async () => {
+    const { orchestrator, conversation, messages, conversations } = harness();
+    conversation.status = ConversationStatus.Human;
+    conversations.set(conversation.id, conversation);
+
+    const first = await orchestrator.process(conversation, 'hello?', user);
+    expect(first.content).toBe('A specialist is on this chat now.');
+    expect(messages.filter((item) => item.senderType === 'bot')).toHaveLength(
+      1,
+    );
+
+    const updated = conversations.get(conversation.id)!;
+    const second = await orchestrator.process(updated, 'are you there?', user);
+    expect(second.content).toBe('');
+    expect(second.message.metadata).toMatchObject({ silent: true });
+    expect(messages.filter((item) => item.senderType === 'bot')).toHaveLength(
+      1,
+    );
   });
 
   it('gives emergency direction immediately', async () => {

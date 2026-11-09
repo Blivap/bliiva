@@ -68,6 +68,13 @@ describe('decision engine', () => {
     expect(decision.knowledge).toBeNull();
   });
 
+  it('quietly redirects illegal off-topic asks instead of escalating', () => {
+    const decision = decide('how can i buy things from black market');
+    expect(decision.kind).toBe(SupportDecisionKind.Fallback);
+    expect(decision.reason).toBe('disallowed_topic');
+    expect(decision.escalationReason).toBeNull();
+  });
+
   it('escalates after repeated failed clarification', () => {
     const context = { ...emptyContext(), unsuccessfulAttempts: 2 };
     const decision = decide('what is the weather today', { context });
@@ -152,5 +159,28 @@ describe('decision engine', () => {
     });
     expect(decision.kind).toBe(SupportDecisionKind.Authenticate);
     expect(decision.knowledge).toBeNull();
+  });
+
+  it('answers withdraw help from knowledge instead of escalating', () => {
+    const decision = decide('please how can i withdraw my money');
+    expect(decision.kind).toBe(SupportDecisionKind.Answer);
+    expect(decision.knowledge?.knowledgeId).toBe('kb-wallet-withdraw');
+    expect(decision.escalationReason).toBeNull();
+  });
+
+  it('refuses wallet mutations without escalating', () => {
+    const decision = decide('Transfer money from my wallet', {
+      unsupportedActionReason: 'wallet_mutation_unsupported',
+    });
+    expect(decision.kind).toBe(SupportDecisionKind.UnsupportedAction);
+    expect(decision.escalationReason).toBeNull();
+  });
+
+  it('lets the specialist own the chat instead of greeting over them', () => {
+    const decision = decide('hi', {
+      greeting: true,
+      humanHandling: true,
+    });
+    expect(decision.kind).toBe(SupportDecisionKind.HumanHandling);
   });
 });

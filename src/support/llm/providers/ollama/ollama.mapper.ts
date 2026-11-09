@@ -49,8 +49,13 @@ export function fromOllamaMessage(message: OllamaChatMessage): {
     name: call.function?.name ?? '',
     arguments: readArguments(call.function?.arguments),
   }));
+  const content =
+    typeof message.content === 'string' ? message.content.trim() : '';
+  const thinking =
+    typeof message.thinking === 'string' ? message.thinking.trim() : '';
   return {
-    content: typeof message.content === 'string' ? message.content : '',
+    // Some thinking models leave content empty and put the reply in thinking.
+    content: content || thinking,
     toolCalls: toolCalls.filter((call) => call.name),
   };
 }

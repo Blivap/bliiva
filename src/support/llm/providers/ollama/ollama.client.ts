@@ -88,6 +88,8 @@ export class OllamaClient {
       tools: request.tools?.length ? toOllamaTools(request.tools) : undefined,
       format: request.format,
       keep_alive: this.options.keepAlive,
+      // Support chat needs the answer in content, not a long thinking trace.
+      think: false,
       options: {
         temperature: request.temperature ?? this.options.temperature,
         num_predict: request.maxOutputTokens ?? this.options.maxOutputTokens,

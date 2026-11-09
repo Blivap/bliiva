@@ -9,10 +9,14 @@ export interface ResolvedAction {
   unsupportedReason?: string;
 }
 
+const WALLET_MUTATION =
+  /\b(transfer|send|withdraw|payout|refund|top ?up|cash out)\b.*\b(money|wallet|funds)\b|\b(money|wallet|funds)\b.*\b(transfer|send|withdraw|payout|refund|cash out)\b|\b(withdraw|cash out|payout)\b/;
+const WALLET_MUTATION_HOWTO =
+  /\b(how (can|do|to)|where (can|do|to)|can i|is it possible to)\b/;
+
 const UNSUPPORTED: Array<{ pattern: RegExp; reason: string }> = [
   {
-    pattern:
-      /\b(transfer|send|withdraw|payout|refund|top ?up)\b.*\b(money|wallet|funds)\b|\b(money|wallet|funds)\b.*\b(transfer|send|withdraw|payout|refund)\b/,
+    pattern: WALLET_MUTATION,
     reason: 'wallet_mutation_unsupported',
   },
   {
@@ -32,9 +36,15 @@ export class ActionsResolver {
   }): ResolvedAction | { unsupported: string } | null {
     const normalized = normalizeText(input.message);
     for (const rule of UNSUPPORTED) {
-      if (rule.pattern.test(normalized)) {
-        return { unsupported: rule.reason };
+      if (!rule.pattern.test(normalized)) continue;
+      // How-to questions stay on the knowledge path instead of mutation refusal.
+      if (
+        rule.reason === 'wallet_mutation_unsupported' &&
+        WALLET_MUTATION_HOWTO.test(normalized)
+      ) {
+        return null;
       }
+      return { unsupported: rule.reason };
     }
     if (!input.intent) return null;
 

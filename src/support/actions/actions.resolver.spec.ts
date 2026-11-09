@@ -43,4 +43,13 @@ describe('actions resolver', () => {
       }),
     ).toEqual({ unsupported: 'wallet_mutation_unsupported' });
   });
+
+  it('keeps withdraw how-to questions on the knowledge path', () => {
+    expect(
+      resolver.resolve({
+        intent: null,
+        message: 'please how can i withdraw my money',
+      }),
+    ).toBeNull();
+  });
 });
