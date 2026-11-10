@@ -119,6 +119,44 @@ describe('SupportAgentService', () => {
     expect(result.responseType).toBe(OrchestratorResponseType.Escalated);
   });
 
+  it('redirects ungrounded off-topic answers without opening a specialist ticket', async () => {
+    const agent = harness({
+      retrieve: vi.fn(async () => ({
+        chunks: [],
+        durationMs: 1,
+        semanticAvailable: false,
+        embeddingMismatch: false,
+        missingEmbeddings: 0,
+        failed: false,
+      })),
+      chat: vi.fn(async () => ({
+        message: {
+          role: 'assistant',
+          content:
+            'That is outside Blivap policy. I cannot discuss that topic.',
+        },
+        toolCalls: [],
+        promptTokens: 8,
+        completionTokens: 12,
+        durationMs: 9,
+        model: 'qwen3:1.7b',
+      })),
+    });
+    const result = await agent.runTurn({
+      conversationId: '64b0000000000000000000bb',
+      content: 'is jesus black or white',
+      actor,
+      context: emptyContext(),
+      history: [],
+    });
+    expect(result.outcome).toBe('answered');
+    expect(result.escalate).toBe(false);
+    expect(result.content).toContain(
+      'Please ask a question about the Blivap app',
+    );
+    expect(result.content.toLowerCase()).not.toContain('specialist');
+  });
+
   it('falls back when the model is unavailable', async () => {
     const agent = harness({
       chat: vi.fn(async () => {

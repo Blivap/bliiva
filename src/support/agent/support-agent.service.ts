@@ -14,6 +14,7 @@ import {
   buildSystemPrompt,
   buildToolPrompt,
 } from '../llm/prompts/index.js';
+import { SCOPE_REDIRECT_MESSAGE } from '../intelligence/response/response-composer.js';
 import {
   detectPromptInjection,
   redactForPrompt,
@@ -162,18 +163,17 @@ export class SupportAgentService {
 
           if (
             chunks.length === 0 &&
-            looksLikePolicyClaim(answer) &&
             !looksLikeIdentityAnswer(answer) &&
             toolCalls === 0
           ) {
+            // No grounding and no tools — redirect to Blivap help, never open a ticket.
             return {
               ...base,
-              outcome: 'escalate',
-              escalate: true,
-              escalationReason: 'insufficient_knowledge',
-              responseType: OrchestratorResponseType.Escalated,
-              content: 'No approved answer for that. Want a specialist?',
-              reason: 'insufficient_knowledge',
+              outcome: 'answered',
+              escalate: false,
+              responseType: OrchestratorResponseType.Answered,
+              content: SCOPE_REDIRECT_MESSAGE,
+              reason: 'out_of_scope',
               model,
               promptTokens,
               completionTokens,
@@ -505,7 +505,7 @@ function sanitizeAnswer(value: string): string {
       cleaned,
     )
   ) {
-    return 'I can only help with Blivap. Ask about your account, donations, blood requests, wallet, or an issue you’re facing.';
+    return SCOPE_REDIRECT_MESSAGE;
   }
   return cleaned.slice(0, 4000);
 }

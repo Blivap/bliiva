@@ -10,6 +10,10 @@ export interface ComposedResponse {
   knowledgeTitle: string | null;
 }
 
+/** Off-topic / ungrounded asks — redirect without offering a specialist. */
+export const SCOPE_REDIRECT_MESSAGE =
+  'Please ask a question about the Blivap app, or tell me about a problem you’re facing.';
+
 const CLINICAL_DISCLAIMER =
   'General info only — eligibility and medical decisions stay with qualified staff.';
 
@@ -124,12 +128,7 @@ export function composeResponse(
       };
     case SupportDecisionKind.Fallback:
       return {
-        content: join([
-          empathy,
-          decision.reason === 'disallowed_topic'
-            ? 'I can only help with Blivap. Ask about your account, donations, blood requests, wallet, or an issue you’re facing.'
-            : 'Couldn’t match that. Try: account, donation, blood request, or wallet.',
-        ]),
+        content: join([empathy, SCOPE_REDIRECT_MESSAGE]),
         knowledgeId: null,
         knowledgeTitle: null,
       };
