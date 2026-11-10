@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import type { SupportActor } from '../../common/auth/support-actor.js';
 import { emptyContext } from '../intelligence/context/conversation-context.js';
@@ -111,6 +112,29 @@ describe('actions executor', () => {
     });
     expect(result.status).toBe(ActionStatus.Success);
     expect(result.message).toContain(user.userId);
+  });
+
+  it('does not escalate when Blivap is temporarily unreachable', async () => {
+    const failingHandler: ActionHandler = {
+      name: 'get_wallet_summary',
+      execute: async () => {
+        throw new ServiceUnavailableException(
+          'Blivap is temporarily unavailable.',
+        );
+      },
+    };
+    const { executor } = build(failingHandler);
+    const result = await executor.execute({
+      actionName: 'get_wallet_summary',
+      conversationId: '64b0000000000000000000c1',
+      actor: user,
+      params: {},
+      context: emptyContext(),
+    });
+    expect(result.status).toBe(ActionStatus.Failed);
+    expect(result.escalate).toBe(false);
+    expect(result.failureCode).toBe('blivap_unavailable');
+    expect(result.message.toLowerCase()).not.toContain('specialist');
   });
 
   it('rejects unauthenticated and missing access-token callers', async () => {

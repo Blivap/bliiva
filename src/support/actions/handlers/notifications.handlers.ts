@@ -63,20 +63,22 @@ export class ListNotificationsHandler implements ActionHandler {
       return {
         status: ActionStatus.Success,
         actionName: this.name,
-        message: 'No recent notifications.',
-        data: { count: 0 },
+        message: 'No recent notifications. Unread: 0.',
+        data: { count: 0, unread: 0 },
       };
     }
+    const unread = rows.filter((row) => row.read !== true).length;
     return {
       status: ActionStatus.Success,
       actionName: this.name,
-      message: rows
-        .map((row, index) => {
+      message: [
+        `Unread in this list: ${unread}.`,
+        ...rows.map((row, index) => {
           const read = row.read ? 'read' : 'unread';
           return `${index + 1}. ${row.title} (${read}) · ${formatWhen(row.createdAt)}`;
-        })
-        .join('\n'),
-      data: { count: rows.length },
+        }),
+      ].join('\n'),
+      data: { count: rows.length, unread },
       resourceType: 'notification',
     };
   }

@@ -1,8 +1,10 @@
 import {
+  BadGatewayException,
   ForbiddenException,
   Inject,
   Injectable,
   Logger,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { isDuplicateKeyError } from '../../common/auth/mongo-errors.js';
@@ -181,6 +183,26 @@ export class ActionsExecutor {
     if (error instanceof ForbiddenException) {
       return rejected(actionName, httpExceptionMessage(error), 'forbidden');
     }
+    if (
+      error instanceof ServiceUnavailableException ||
+      error instanceof BadGatewayException
+    ) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'support.action.blivap_unavailable',
+          actionName,
+          message: httpExceptionMessage(error),
+        }),
+      );
+      return {
+        status: ActionStatus.Failed,
+        actionName,
+        message:
+          'I couldn’t reach your Blivap account just now. Please try again in a moment.',
+        failureCode: 'blivap_unavailable',
+        escalate: false,
+      };
+    }
     const message =
       error instanceof Error ? error.message : 'The account service failed.';
     this.logger.warn(
@@ -193,9 +215,10 @@ export class ActionsExecutor {
     return {
       status: ActionStatus.Failed,
       actionName,
-      message: 'Lookup failed. Try again or ask for a specialist.',
+      message:
+        'I couldn’t look that up right now. Please try again in a moment.',
       failureCode: 'service_error',
-      escalate: true,
+      escalate: false,
     };
   }
 
@@ -262,7 +285,11 @@ function rejected(
 }
 
 function httpExceptionMessage(
-  error: UnauthorizedException | ForbiddenException,
+  error:
+    | UnauthorizedException
+    | ForbiddenException
+    | ServiceUnavailableException
+    | BadGatewayException,
 ): string {
   const body = error.getResponse();
   if (typeof body === 'string' && body.trim()) return body;

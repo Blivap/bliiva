@@ -12,6 +12,7 @@ import {
   BLIVAP_INTEGRATION,
   type BlivapIntegrationPort,
 } from '../../../integrations/blivap/index.js';
+import { withActionGuidance } from '../../actions/action-guidance.js';
 import { ActionsExecutor } from '../../actions/actions.executor.js';
 import { ActionsResolver } from '../../actions/actions.resolver.js';
 import { ActionStatus } from '../../actions/actions.types.js';
@@ -32,6 +33,7 @@ import {
   type ConversationContextState,
 } from '../context/conversation-context.js';
 import { DecisionEngineService } from '../decision/decision-engine.service.js';
+import { IntelligenceSettingsService } from '../intelligence-settings.service.js';
 import {
   SupportDecisionKind,
   type SupportDecision,
@@ -98,6 +100,7 @@ export class SupportOrchestratorService {
     private readonly recognizer: RuleBasedRecognizerService,
     private readonly retrieval: KnowledgeRetrievalService,
     private readonly decisions: DecisionEngineService,
+    private readonly settings: IntelligenceSettingsService,
     private readonly safety: SafetyService,
     private readonly escalation: EscalationService,
     private readonly analytics: AnalyticsService,
@@ -387,7 +390,22 @@ export class SupportOrchestratorService {
             ? `${conversation.id}:${decision.actionName}:${JSON.stringify(decision.actionParams ?? {})}`
             : undefined,
       });
-      actionContent = actionResult.message;
+      const guidanceOutcome =
+        actionResult.status === ActionStatus.Success
+          ? 'success'
+          : actionResult.status === ActionStatus.Rejected
+            ? 'rejected'
+            : actionResult.status === ActionStatus.Failed
+              ? 'failed'
+              : null;
+      actionContent =
+        guidanceOutcome && decision.actionName
+          ? withActionGuidance(
+              decision.actionName,
+              actionResult.message,
+              guidanceOutcome,
+            )
+          : actionResult.message;
       if (actionResult.status === ActionStatus.NeedsConfirmation) {
         decision = {
           ...decision,
@@ -499,20 +517,40 @@ export class SupportOrchestratorService {
           };
         }
       } else if (actionResult.status === ActionStatus.Failed) {
-        if (actionResult.escalate) {
+        const attempts = context.unsuccessfulAttempts + 1;
+        const deadEnd =
+          actionResult.escalate === true ||
+          attempts >= this.settings.current().maxClarificationAttempts;
+        if (deadEnd) {
           decision = {
             ...decision,
             kind: SupportDecisionKind.Escalate,
             responseType: OrchestratorResponseType.Escalated,
-            reason: 'action_failed',
-            escalationReason: 'action_failed',
+            reason: 'action_failed_dead_end',
+            escalationReason: 'action_failed_dead_end',
             priority: Priority.Medium,
+            countsAsUnresolved: true,
           };
+          actionContent = withActionGuidance(
+            decision.actionName ?? 'action',
+            actionResult.message,
+            'failed',
+          );
         } else {
           decision = {
             ...decision,
             responseType: OrchestratorResponseType.TemporaryError,
             reason: 'action_failed',
+            countsAsUnresolved: true,
+          };
+          nextContextOverride = {
+            ...context,
+            pendingActionName: null,
+            pendingActionParams: {},
+            pendingConfirmationId: null,
+            conversationState: 'clarifying',
+            pendingClarification: null,
+            unsuccessfulAttempts: attempts,
           };
         }
       }
