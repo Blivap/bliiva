@@ -56,7 +56,9 @@ describe('composeResponse out-of-scope fallback', () => {
       confidence: 0,
     };
     const result = composeResponse(decision);
-    expect(result.content).toContain('Please ask a question about the Blivap app');
+    expect(result.content).toContain(
+      'Please ask a question about the Blivap app',
+    );
     expect(result.content.toLowerCase()).not.toContain('authorities');
     expect(result.content.toLowerCase()).not.toContain('specialist');
     expect(result.content.toLowerCase()).not.toContain('report');
