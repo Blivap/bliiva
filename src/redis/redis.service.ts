@@ -1,7 +1,9 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Redis as IoRedis } from 'ioredis';
+import { resolveRedisConnection } from './redis-connection.js';
 
 export interface RedisConnectionOptions {
+  url?: string;
   host: string;
   port: number;
   password?: string;
@@ -15,11 +17,9 @@ export class RedisService implements OnModuleDestroy {
   private readonly client: IoRedis;
 
   constructor(options: RedisConnectionOptions) {
+    const connection = resolveRedisConnection(options);
     this.client = new IoRedis({
-      host: options.host,
-      port: options.port,
-      password: options.password,
-      db: options.db,
+      ...connection,
       keyPrefix: options.keyPrefix,
       maxRetriesPerRequest: null,
       lazyConnect: true,
