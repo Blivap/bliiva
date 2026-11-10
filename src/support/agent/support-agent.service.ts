@@ -249,13 +249,18 @@ export class SupportAgentService {
         }
 
         if (round >= llm.maxToolCalls) {
+          const deadEnd = input.context.unsuccessfulAttempts >= 1;
           return {
             ...base,
-            outcome: 'escalate',
-            escalate: true,
-            escalationReason: 'tool_loop_limit',
-            responseType: OrchestratorResponseType.Escalated,
-            content: 'Lookup failed. Want a specialist?',
+            outcome: deadEnd ? 'escalate' : 'answered',
+            escalate: deadEnd,
+            escalationReason: deadEnd ? 'tool_loop_limit' : null,
+            responseType: deadEnd
+              ? OrchestratorResponseType.Escalated
+              : OrchestratorResponseType.Answered,
+            content: deadEnd
+              ? 'I still couldn’t finish that lookup. I can connect you to a specialist.'
+              : 'I couldn’t finish that lookup. Please try again, or tell me another detail to check.',
             reason: 'tool_loop_limit',
             model,
             promptTokens,
@@ -265,6 +270,11 @@ export class SupportAgentService {
             chunks,
             toolCalls,
             latencyMs: Date.now() - started,
+            context: {
+              ...nextContext,
+              unsuccessfulAttempts: input.context.unsuccessfulAttempts + 1,
+              conversationState: 'clarifying',
+            },
           };
         }
 

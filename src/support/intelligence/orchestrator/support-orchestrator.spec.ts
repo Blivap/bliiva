@@ -95,6 +95,7 @@ function harness() {
       settings,
     ),
     new DecisionEngineService(settings),
+    settings,
     new SafetyService(),
     {
       escalate: async (request: EscalationRequest) => {
