@@ -14,6 +14,7 @@ import {
 } from './config/index.js';
 import { HealthModule } from './health/health.module.js';
 import { BlivapIntegrationModule } from './integrations/blivap/index.js';
+import { resolveRedisConnection } from './redis/redis-connection.js';
 import { RedisModule } from './redis/redis.module.js';
 import { SupportModule } from './support/support.module.js';
 
@@ -53,16 +54,22 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     }),
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        prefix: config.get<string>('bullmq.prefix', '{bliiva}'),
-        connection: {
+      useFactory: (config: ConfigService) => {
+        const connection = resolveRedisConnection({
+          url: config.get<string | undefined>('redis.url'),
           host: config.get<string>('redis.host', 'localhost'),
           port: config.get<number>('redis.port', 6379),
           password: config.get<string | undefined>('redis.password'),
           db: config.get<number>('redis.db', 0),
-          maxRetriesPerRequest: null,
-        },
-      }),
+        });
+        return {
+          prefix: config.get<string>('bullmq.prefix', '{bliiva}'),
+          connection: {
+            ...connection,
+            maxRetriesPerRequest: null,
+          },
+        };
+      },
     }),
     RedisModule,
     BlivapIntegrationModule,

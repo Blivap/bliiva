@@ -12,6 +12,7 @@ import { RedisService } from './redis.service.js';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const service = new RedisService({
+          url: config.get<string | undefined>('redis.url'),
           host: config.get<string>('redis.host', 'localhost'),
           port: config.get<number>('redis.port', 6379),
           password: config.get<string | undefined>('redis.password'),

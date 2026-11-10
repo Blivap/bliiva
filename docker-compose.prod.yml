@@ -56,6 +56,8 @@ services:
       - .env
     environment:
       NODE_ENV: production
+      # Compose Mongo/Redis on the internal network. To use a managed Redis
+      # instead, set REDIS_URL in .env (it takes precedence over REDIS_HOST).
       MONGODB_URI: mongodb://mongo:27017/bliiva_support
       REDIS_HOST: redis
       REDIS_PORT: '6379'
