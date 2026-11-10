@@ -46,8 +46,8 @@ describe('composeResponse greeting', () => {
   });
 });
 
-describe('composeResponse disallowed topic', () => {
-  it('redirects to Blivap help without mentioning authorities or reporting', () => {
+describe('composeResponse out-of-scope fallback', () => {
+  it('asks for an app or problem question without offering a specialist', () => {
     const decision: SupportDecision = {
       ...greetDecision(),
       kind: SupportDecisionKind.Fallback,
@@ -56,8 +56,9 @@ describe('composeResponse disallowed topic', () => {
       confidence: 0,
     };
     const result = composeResponse(decision);
-    expect(result.content).toContain('I can only help with Blivap');
+    expect(result.content).toContain('Please ask a question about the Blivap app');
     expect(result.content.toLowerCase()).not.toContain('authorities');
+    expect(result.content.toLowerCase()).not.toContain('specialist');
     expect(result.content.toLowerCase()).not.toContain('report');
   });
 });
