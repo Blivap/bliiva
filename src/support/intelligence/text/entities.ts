@@ -4,7 +4,7 @@ export function extractEntities(text: string): Record<string, string> {
   if (email) entities.email = email[0].toLowerCase();
 
   const blood = text.match(
-    /\b(AB|A|B|O)\s*(\+|plus|-|minus|positive|negative)\b/i,
+    /\b(AB|A|B|O)\s*(\+|plus|-|minus|positive|negative)(?=\s|$|[^a-z0-9])/i,
   );
   if (blood) {
     const sign = blood[2].toLowerCase();

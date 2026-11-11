@@ -40,6 +40,25 @@ export class ConversationsController {
     );
   }
 
+  @Get()
+  @ApiOperation({ summary: 'List support conversations for the current user' })
+  async list(
+    @CurrentActor() actor: SupportActor,
+    @Query() query: PaginationQueryDto,
+  ) {
+    const page = await this.conversations.listFor(
+      actor,
+      query.page,
+      query.limit,
+    );
+    return okResponse('Conversations', page.items, {
+      page: page.page,
+      limit: page.limit,
+      total: page.total,
+      totalPages: page.totalPages,
+    });
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get the current conversation state' })
   async get(@CurrentActor() actor: SupportActor, @Param('id') id: string) {

@@ -46,14 +46,16 @@ services:
       - 'host.docker.internal:host-gateway'
     environment:
       PORT: 3000
-      # Container loopback is not the host Ollama. Use the compose service DNS.
-      LLM_BASE_URL: http://ollama:11434
+      # In-compose Ollama (profile llm). Override to host Metal with
+      # LLM_BASE_URL=http://host.docker.internal:11434 if preferred.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
       LLM_ENABLED: 'true'
       # Small Docker Desktop RAM: keep one chat model loaded, skip embed thrash.
+      # Catalog knowledge still grounds how-to answers without embeddings.
       RAG_ENABLED: 'false'
-      LLM_NUM_CTX: 1024
-      LLM_MAX_OUTPUT_TOKENS: 128
-      LLM_MAX_CONTEXT_TOKENS: 1536
+      LLM_NUM_CTX: 4096
+      LLM_MAX_OUTPUT_TOKENS: 256
+      LLM_MAX_CONTEXT_TOKENS: 8192
       LLM_TIMEOUT_MS: 180000
       LLM_KEEP_ALIVE: 30m
       MONGODB_URI: mongodb://mongo:27017/bliiva_support

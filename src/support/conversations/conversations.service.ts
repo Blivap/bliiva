@@ -45,6 +45,32 @@ export class ConversationsService {
     return this.presentConversation(conversation);
   }
 
+  async listFor(actor: SupportActor, page: number, limit: number) {
+    const filter = ownerFilter(actor);
+    if (!filter) {
+      return toPaginatedResult([], 0, page, limit);
+    }
+    const [items, total] = await this.conversations.findPaginated(
+      filter,
+      page,
+      limit,
+    );
+    const presented = await Promise.all(
+      items.map(async (item) => {
+        const recent = await this.messages.findRecent(String(item._id), 1);
+        const last = recent[0];
+        return {
+          ...this.presentConversation(item),
+          preview:
+            last && typeof last.content === 'string'
+              ? last.content.slice(0, 160)
+              : null,
+        };
+      }),
+    );
+    return toPaginatedResult(presented, total, page, limit);
+  }
+
   async messagesFor(
     actor: SupportActor,
     id: string,
@@ -182,6 +208,16 @@ export class ConversationsService {
       pendingClarification: pending,
     };
   }
+}
+
+function ownerFilter(actor: SupportActor): Record<string, unknown> | null {
+  if (actor.userId) {
+    return { userId: new Types.ObjectId(actor.userId) };
+  }
+  if (actor.guestSessionId) {
+    return { guestSessionId: actor.guestSessionId };
+  }
+  return null;
 }
 
 function canAccess(

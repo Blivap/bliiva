@@ -119,15 +119,40 @@ function harness() {
     } as never),
     { createAudit: async () => ({}) } as unknown as AuditRepository,
     {
-      execute: async () => ({
-        status: 'success',
-        actionName: 'get_wallet_summary',
-        message:
-          'Here is your wallet on this signed-in account.\nAvailable: NGN 12.50',
-      }),
+      execute: async (request: { name?: string; actionName?: string }) => {
+        const name = request.name ?? request.actionName;
+        if (name === 'resend_email_verification') {
+          return {
+            status: 'needs_confirmation',
+            actionName: 'resend_email_verification',
+            message:
+              'Resend the email verification link to the address already on this account.',
+            confirmationId: 'confirm-resend-1',
+          };
+        }
+        if (name === 'get_wallet_summary') {
+          return {
+            status: 'success',
+            actionName: 'get_wallet_summary',
+            message:
+              'Here is your wallet on this signed-in account.\nAvailable: NGN 12.50',
+          };
+        }
+        return {
+          status: 'success',
+          actionName: name ?? 'get_wallet_summary',
+          message:
+            'Here is your wallet on this signed-in account.\nAvailable: NGN 12.50',
+        };
+      },
     } as never,
     {
-      resolve: (input: { intent: string | null; message: string }) => {
+      resolve: (input: {
+        intent: string | null;
+        message: string;
+        lastBotResponse?: string | null;
+        userGoAhead?: boolean;
+      }) => {
         if (
           input.intent === 'WALLET_BALANCE' ||
           /wallet balance/i.test(input.message)
@@ -137,6 +162,29 @@ function harness() {
               name: 'get_wallet_summary',
               enabled: true,
             },
+            params: { focus: 'balance' },
+          };
+        }
+        if (
+          (input.intent === 'ACCOUNT_STATUS' ||
+            input.intent === 'ACCOUNT_LOGIN') &&
+          /do it|resend|go ahead/i.test(input.message)
+        ) {
+          return {
+            action: {
+              name: 'resend_email_verification',
+              enabled: true,
+              requiresConfirmation: true,
+            },
+            params: {},
+          };
+        }
+        if (
+          input.userGoAhead &&
+          /balance|want me to show/i.test(String(input.lastBotResponse ?? ''))
+        ) {
+          return {
+            action: { name: 'get_wallet_summary', enabled: true },
             params: { focus: 'balance' },
           };
         }
@@ -187,7 +235,7 @@ describe('support orchestrator', () => {
     const { orchestrator, conversation } = harness();
     const turn = await orchestrator.process(conversation, 'hi', user);
     expect(turn.content).toMatch(
-      /^Hi — I’m Blivap’s official AI support assistant/,
+      /^Hi — I’m Bliiva, Blivap’s official AI support assistant/,
     );
   });
 
@@ -198,7 +246,7 @@ describe('support orchestrator', () => {
     };
     const turn = await orchestrator.process(conversation, 'hello', user);
     expect(turn.content).toBe(
-      'Hi Ada — I’m Blivap’s official AI support assistant. How can I help?',
+      'Hi Ada — I’m Bliiva, Blivap’s official AI support assistant. How can I help?',
     );
   });
 
@@ -209,7 +257,7 @@ describe('support orchestrator', () => {
       "hello what's your name",
       user,
     );
-    expect(turn.content).toMatch(/official AI support assistant/);
+    expect(turn.content.toLowerCase()).toMatch(/blivap.*ai support assistant/);
     expect(turn.content).not.toContain('Couldn’t match');
   });
 
@@ -220,7 +268,7 @@ describe('support orchestrator', () => {
       'hi are you and ai ?',
       user,
     );
-    expect(turn.content).toMatch(/official AI support assistant/);
+    expect(turn.content.toLowerCase()).toMatch(/blivap.*ai support assistant/);
     expect(turn.content).not.toContain('Couldn’t match');
   });
 
@@ -277,8 +325,9 @@ describe('support orchestrator', () => {
     expect(corrected.content).toContain('wallet');
   });
 
-  it('escalates a repeated unresolved question and a human request', async () => {
-    const { orchestrator, conversation, escalations } = harness();
+  it('asks before escalating a repeated unresolved question, then escalates on yes', async () => {
+    const { orchestrator, conversation, escalations, conversations } =
+      harness();
     await orchestrator.process(conversation, 'what is the weather today', user);
     await orchestrator.process(conversation, 'tell me a joke', user);
     const third = await orchestrator.process(
@@ -286,7 +335,14 @@ describe('support orchestrator', () => {
       'who won the match',
       user,
     );
-    expect(third.responseType).toBe('ESCALATED');
+    expect(third.responseType).toBe('CLARIFICATION_REQUIRED');
+    expect(third.content.toLowerCase()).toContain('specialist');
+    expect(escalations).toHaveLength(0);
+
+    const offered = conversations.get(conversation.id) ?? conversation;
+    const confirmed = await orchestrator.process(offered, 'yes', user);
+    expect(confirmed.responseType).toBe('ESCALATED');
+    expect(confirmed.reference).toBe('SUP-TEST-1000');
     expect(escalations.at(-1)?.reason).toBe('repeated_failure');
 
     const humanHarness = harness();
@@ -319,8 +375,99 @@ describe('support orchestrator', () => {
     );
   });
 
-  it('gives emergency direction immediately', async () => {
-    const { orchestrator, conversation, escalations } = harness();
+  it('stays silent after handoff while waiting for a specialist', async () => {
+    const { orchestrator, conversation, conversations } = harness();
+    const handedOff = await orchestrator.process(
+      conversation,
+      'I want to talk to a real person',
+      user,
+    );
+    expect(handedOff.responseType).toBe('ESCALATED');
+    const waiting = conversations.get(conversation.id)!;
+    expect(waiting.status).toBe(ConversationStatus.Waiting);
+    expect(
+      (waiting.context as { specialistNotified?: boolean }).specialistNotified,
+    ).toBe(true);
+
+    const after = await orchestrator.process(waiting, 'alright', user);
+    expect(after.content).toBe('');
+    expect(after.state.currentIntent).toBeNull();
+  });
+
+  it('runs a wallet lookup when the user says yes after a balance offer', async () => {
+    const { orchestrator, conversation, conversations } = harness();
+    conversation.context = {
+      currentIntent: 'WALLET_BALANCE',
+      conversationState: 'answered',
+      lastBotResponse:
+        'Your balance is available. Want me to show it to you?',
+      pendingClarification: {
+        kind: 'action_offer',
+        question: 'Want me to show it to you?',
+        options: [
+          {
+            intent: 'WALLET_BALANCE',
+            label: 'yes',
+            actionName: 'get_wallet_summary',
+          },
+          { intent: 'WALLET_BALANCE', label: 'no' },
+        ],
+        actionName: 'get_wallet_summary',
+      },
+      pendingActionName: 'get_wallet_summary',
+    };
+    conversations.set(conversation.id, conversation);
+
+    const turn = await orchestrator.process(conversation, 'yes', user);
+    expect(turn.responseType).toBe('ACTION_COMPLETED');
+    expect(turn.content.toLowerCase()).toContain('wallet');
+  });
+
+  it('runs the offered verification action on do it instead of repeating help', async () => {
+    const { orchestrator, conversation, conversations } = harness();
+    conversation.context = {
+      currentIntent: 'ACCOUNT_STATUS',
+      conversationState: 'answered',
+      pendingClarification: {
+        kind: 'follow_up',
+        question: 'Anything else?',
+        options: [
+          { intent: 'ACCOUNT_STATUS', label: 'yes' },
+          { intent: 'REQUEST_HUMAN', label: 'no I need more help' },
+        ],
+      },
+    };
+    conversations.set(conversation.id, conversation);
+
+    const turn = await orchestrator.process(conversation, 'yes do it', user);
+    expect(turn.responseType).toBe('ACTION_CONFIRMATION_REQUIRED');
+    expect(turn.content.toLowerCase()).toContain('verification');
+    expect(turn.content.toLowerCase()).not.toContain('how can i verify');
+    const updated = conversations.get(conversation.id)!;
+    expect(
+      (updated.context as { pendingClarification?: { kind?: string } })
+        .pendingClarification?.kind,
+    ).toBe('action_confirm');
+  });
+
+  it('does not reopen the prior topic on a soft ack', async () => {
+    const { orchestrator, conversation, conversations } = harness();
+    conversation.context = {
+      currentIntent: 'ACCOUNT_STATUS',
+      conversationState: 'answered',
+      pendingClarification: null,
+    };
+    conversations.set(conversation.id, conversation);
+
+    const turn = await orchestrator.process(conversation, 'alright', user);
+    expect(turn.content.toLowerCase()).toContain('here if you need');
+    expect(turn.content.toLowerCase()).not.toContain('verif');
+    expect(turn.state.currentIntent).toBeNull();
+  });
+
+  it('gives emergency direction and only tickets after the user says yes', async () => {
+    const { orchestrator, conversation, escalations, conversations } =
+      harness();
     const turn = await orchestrator.process(
       conversation,
       'I have chest pain',
@@ -328,6 +475,12 @@ describe('support orchestrator', () => {
     );
     expect(turn.content).toContain('emergency services');
     expect(turn.content).toContain('Do not wait');
+    expect(turn.content.toLowerCase()).toContain('specialist');
+    expect(escalations).toHaveLength(0);
+
+    const offered = conversations.get(conversation.id) ?? conversation;
+    const confirmed = await orchestrator.process(offered, 'yes', user);
+    expect(confirmed.responseType).toBe('ESCALATED');
     expect(escalations[0]?.reason).toBe('medical_emergency');
     expect(escalations[0]?.priority).toBe('urgent');
   });

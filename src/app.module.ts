@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bullmq';
 import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor.js';
 import {
   configuration,
   databaseConfig,
@@ -77,6 +79,12 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     HealthModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RequestLoggingInterceptor,
+    },
+  ],
 })
 export class AppModule {}

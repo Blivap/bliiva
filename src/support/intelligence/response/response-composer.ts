@@ -10,18 +10,14 @@ export interface ComposedResponse {
   knowledgeTitle: string | null;
 }
 
-/** Off-topic / ungrounded asks — redirect without offering a specialist. */
-export const SCOPE_REDIRECT_MESSAGE =
-  'Please ask a question about the Blivap app, or tell me about a problem you’re facing.';
-
 const CLINICAL_DISCLAIMER =
   'General info only — eligibility and medical decisions stay with qualified staff.';
 
-const EMERGENCY_MESSAGE =
-  'If this is a medical emergency, contact local emergency services or go to the nearest hospital now. Do not wait for chat. A specialist has been notified.';
-
-const EMERGENCY_WITHOUT_TICKET =
+const EMERGENCY_ADVICE =
   'If this is a medical emergency, contact local emergency services or go to the nearest hospital now. Do not wait for chat.';
+
+export const ESCALATION_OFFER_QUESTION =
+  'Want me to connect you to a human specialist? Reply yes or no.';
 
 function join(parts: Array<string | null | undefined>): string {
   return parts
@@ -53,8 +49,20 @@ export function composeResponse(
     case SupportDecisionKind.Emergency:
       return {
         content: options.ticketQueued
-          ? EMERGENCY_MESSAGE
-          : EMERGENCY_WITHOUT_TICKET,
+          ? `${EMERGENCY_ADVICE} A specialist has been notified.`
+          : join([EMERGENCY_ADVICE, ESCALATION_OFFER_QUESTION]),
+        knowledgeId: knowledge?.knowledgeId ?? null,
+        knowledgeTitle: knowledge?.title ?? null,
+      };
+    case SupportDecisionKind.OfferEscalate:
+      return {
+        content: join([
+          empathy,
+          escalationBody(decision.reason, knowledge?.answer ?? null),
+          disclaimer,
+          decision.reason === 'medical_emergency' ? EMERGENCY_ADVICE : null,
+          offerHandoff(decision.reason),
+        ]),
         knowledgeId: knowledge?.knowledgeId ?? null,
         knowledgeTitle: knowledge?.title ?? null,
       };
@@ -128,7 +136,7 @@ export function composeResponse(
       };
     case SupportDecisionKind.Fallback:
       return {
-        content: join([empathy, SCOPE_REDIRECT_MESSAGE]),
+        content: join([empathy, temporaryErrorMessage()]),
         knowledgeId: null,
         knowledgeTitle: null,
       };
@@ -189,8 +197,34 @@ function handoff(reason: string, queued: boolean): string {
     case 'follow_up_unresolved':
     case 'repeated_question':
       return `Still unresolved. ${queuedText}`;
+    case 'medical_emergency':
+      return queued
+        ? `${EMERGENCY_ADVICE} A specialist has been notified.`
+        : join([EMERGENCY_ADVICE, ESCALATION_OFFER_QUESTION]) ??
+            ESCALATION_OFFER_QUESTION;
     default:
       return queuedText;
+  }
+}
+
+function offerHandoff(reason: string): string {
+  switch (reason) {
+    case 'security_incident':
+    case 'unauthorized_transaction':
+      return `Thanks — don’t send passwords or codes here. ${ESCALATION_OFFER_QUESTION}`;
+    case 'serious_complaint':
+      return `Sorry about this. ${ESCALATION_OFFER_QUESTION}`;
+    case 'personal_clinical_decision':
+      return `Platform help only; medical decisions need clinicians. ${ESCALATION_OFFER_QUESTION}`;
+    case 'repeated_failure':
+    case 'frustrated_unresolved':
+    case 'follow_up_unresolved':
+    case 'repeated_question':
+      return `Still unresolved. ${ESCALATION_OFFER_QUESTION}`;
+    case 'medical_emergency':
+      return ESCALATION_OFFER_QUESTION;
+    default:
+      return ESCALATION_OFFER_QUESTION;
   }
 }
 
@@ -201,7 +235,7 @@ export function temporaryErrorMessage(): string {
 function unsupportedActionMessage(reason: string | null | undefined): string {
   switch (reason) {
     case 'wallet_mutation_unsupported':
-      return 'I can’t move money from chat. Open Wallet in the app to withdraw or transfer. I can show your balance here, or connect you to a specialist if something looks wrong.';
+      return 'I can’t transfer or refund from chat. I can help you top up (Paystack link) or withdraw to your saved bank with OTP — or open Wallet in the app. I can also show your balance here.';
     case 'blood_request_cancel_unsupported':
       return 'I can’t cancel blood requests from chat. I can show status or escalate.';
     default:
@@ -212,8 +246,8 @@ function unsupportedActionMessage(reason: string | null | undefined): string {
 function greetingMessage(userName?: string | null): string {
   const name = sanitizeDisplayName(userName);
   return name
-    ? `Hi ${name} — I’m Blivap’s official AI support assistant. How can I help?`
-    : 'Hi — I’m Blivap’s official AI support assistant. How can I help?';
+    ? `Hi ${name} — I’m Bliiva, Blivap’s official AI support assistant. How can I help?`
+    : 'Hi — I’m Bliiva, Blivap’s official AI support assistant. How can I help?';
 }
 
 function sanitizeDisplayName(value?: string | null): string | null {

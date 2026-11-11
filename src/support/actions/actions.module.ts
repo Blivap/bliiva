@@ -7,17 +7,51 @@ import { ActionsRegistry } from './actions.registry.js';
 import { ActionsResolver } from './actions.resolver.js';
 import { ACTION_HANDLERS } from './actions.types.js';
 import {
+  ChangePasswordHandler,
+  ListHospitalsHandler,
+  ListWelfarePackagesHandler,
+  MarkAllNotificationsReadHandler,
+  MarkNotificationReadHandler,
+  RegisterDonorHandler,
+  RequestPasswordResetHandler,
+  SubmitNinVerificationHandler,
+  UpdateDonorLocationHandler,
+  UpdateMeetupCareHandler,
+  UpdateProfileHandler,
+} from './handlers/account-extended.handlers.js';
+import {
   GetAccountStatusHandler,
   GetIdentityVerificationHandler,
   GetProfileHandler,
   ResendEmailVerificationHandler,
 } from './handlers/account.handlers.js';
-import { GetDonorProfileHandler } from './handlers/donor.handlers.js';
+import {
+  AcceptBookingHandler,
+  CreateBloodRequestHandler,
+  DeclineBookingHandler,
+  ListBookingsHandler,
+  ReportBookingHandler,
+  RequestBookingHandler,
+} from './handlers/bookings-extended.handlers.js';
+import {
+  GetDonorProfileHandler,
+  ListDonorsHandler,
+} from './handlers/donor.handlers.js';
 import {
   CancelBookingHandler,
   GetDonationHandler,
   GetDonationsHandler,
 } from './handlers/donations.handlers.js';
+import {
+  CompleteMeetupHandler,
+  ConfirmMeetupDonorHandler,
+  ConfirmMeetupRequesterHandler,
+  CreateMeetupSessionHandler,
+  GetMeetupSessionHandler,
+  ReportMeetupHandler,
+  TerminateMeetupHandler,
+  VerifyMeetupCodeHandler,
+} from './handlers/meetup.handlers.js';
 import {
   GetNotificationSettingsHandler,
   ListNotificationsHandler,
@@ -27,6 +61,20 @@ import {
   GetBloodRequestHandler,
   GetBloodRequestsHandler,
 } from './handlers/requests.handlers.js';
+import {
+  AddBankAccountHandler,
+  ConfirmWalletPayoutHandler,
+  GetPayoutHandler,
+  ListBankAccountsHandler,
+  ListBanksHandler,
+  ListPayoutsHandler,
+  RemoveBankAccountHandler,
+  ResendPayoutOtpHandler,
+  SetPrimaryBankAccountHandler,
+  StartWalletPayoutHandler,
+  StartWalletTopupHandler,
+  VerifyWalletTopupHandler,
+} from './handlers/wallet-extended.handlers.js';
 import { GetWalletSummaryHandler } from './handlers/wallet.handlers.js';
 
 const HANDLERS = [
@@ -35,6 +83,7 @@ const HANDLERS = [
   ResendEmailVerificationHandler,
   GetIdentityVerificationHandler,
   GetDonorProfileHandler,
+  ListDonorsHandler,
   GetDonationsHandler,
   GetDonationHandler,
   CancelBookingHandler,
@@ -44,6 +93,43 @@ const HANDLERS = [
   GetNotificationSettingsHandler,
   ListNotificationsHandler,
   UpdateNotificationSettingsHandler,
+  ListBanksHandler,
+  ListBankAccountsHandler,
+  ListPayoutsHandler,
+  GetPayoutHandler,
+  StartWalletTopupHandler,
+  VerifyWalletTopupHandler,
+  StartWalletPayoutHandler,
+  ConfirmWalletPayoutHandler,
+  ResendPayoutOtpHandler,
+  AddBankAccountHandler,
+  SetPrimaryBankAccountHandler,
+  RemoveBankAccountHandler,
+  ListBookingsHandler,
+  RequestBookingHandler,
+  AcceptBookingHandler,
+  DeclineBookingHandler,
+  ReportBookingHandler,
+  CreateBloodRequestHandler,
+  UpdateProfileHandler,
+  ChangePasswordHandler,
+  RequestPasswordResetHandler,
+  SubmitNinVerificationHandler,
+  RegisterDonorHandler,
+  UpdateDonorLocationHandler,
+  UpdateMeetupCareHandler,
+  MarkNotificationReadHandler,
+  MarkAllNotificationsReadHandler,
+  ListHospitalsHandler,
+  ListWelfarePackagesHandler,
+  GetMeetupSessionHandler,
+  CreateMeetupSessionHandler,
+  VerifyMeetupCodeHandler,
+  ConfirmMeetupRequesterHandler,
+  ConfirmMeetupDonorHandler,
+  CompleteMeetupHandler,
+  TerminateMeetupHandler,
+  ReportMeetupHandler,
 ];
 
 @Module({

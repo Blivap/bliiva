@@ -33,7 +33,7 @@ describe('conversation context', () => {
     });
   });
 
-  it('treats yes after an answer as confirmation, isolated from another conversation', () => {
+  it('treats soft acks after an answer as done, and yes as more help', () => {
     const answered = {
       ...emptyContext(),
       currentIntent: 'PASSWORD_RESET',
@@ -49,11 +49,55 @@ describe('conversation context', () => {
     };
     const other = emptyContext();
     expect(
-      resolvePendingReply(answered, 'yes', detectUtterance('yes')).type,
+      resolvePendingReply(
+        answered,
+        'alright',
+        detectUtterance(normalizeText('alright')),
+      ).type,
     ).toBe('affirm');
+    expect(
+      resolvePendingReply(answered, 'yes', detectUtterance('yes')).type,
+    ).toBe('reject');
+    expect(
+      resolvePendingReply(
+        answered,
+        'do it',
+        detectUtterance(normalizeText('do it')),
+      ).type,
+    ).toBe('none');
     expect(resolvePendingReply(other, 'yes', detectUtterance('yes')).type).toBe(
       'none',
     );
+  });
+
+  it('treats alright and do it as affirmations for action confirmation', () => {
+    const confirming = {
+      ...emptyContext(),
+      currentIntent: 'ACCOUNT_STATUS',
+      pendingClarification: {
+        kind: 'action_confirm' as const,
+        question: 'Resend the verification email?',
+        options: [
+          { intent: 'ACCOUNT_STATUS', label: 'yes' },
+          { intent: 'ACCOUNT_STATUS', label: 'no' },
+        ],
+        actionName: 'resend_email_verification',
+      },
+    };
+    expect(
+      resolvePendingReply(
+        confirming,
+        'alright',
+        detectUtterance(normalizeText('alright')),
+      ).type,
+    ).toBe('affirm');
+    expect(
+      resolvePendingReply(
+        confirming,
+        'yes do it',
+        detectUtterance(normalizeText('yes do it')),
+      ).type,
+    ).toBe('affirm');
   });
 
   it('reads a stored context without trusting unknown fields', () => {

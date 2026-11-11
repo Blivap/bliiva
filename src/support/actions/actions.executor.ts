@@ -48,7 +48,12 @@ export class ActionsExecutor {
       );
     }
 
-    const authError = this.authorize(definition, request);
+    const authError = this.authorize(definition, request, {
+      // Asking "Resend verification?" only needs a signed-in user id.
+      // The Blivap access token is required when the action actually runs.
+      requireAccessToken: Boolean(request.confirmationId) ||
+        !definition.requiresConfirmation,
+    });
     if (authError) return authError;
 
     if (definition.requiresConfirmation && !request.confirmationId) {
@@ -113,6 +118,7 @@ export class ActionsExecutor {
   private authorize(
     definition: SupportActionDefinition,
     request: ActionExecutionRequest,
+    options: { requireAccessToken?: boolean } = {},
   ): ActionExecutionResult | null {
     if (definition.requiresAuthentication && !request.actor.isAuthenticated) {
       return {
@@ -124,6 +130,7 @@ export class ActionsExecutor {
       };
     }
     if (
+      options.requireAccessToken !== false &&
       definition.requiresAuthentication &&
       request.actor.isAuthenticated &&
       !request.actor.accessToken
@@ -314,5 +321,32 @@ function confirmationSummary(
   if (definition.name === 'resend_email_verification') {
     return 'Resend the email verification link to the address already on this account.';
   }
-  return `Run ${definition.name}.`;
+  if (definition.name === 'start_wallet_topup') {
+    return `Start a wallet top-up of ₦${params.amountNaira ?? params.amount ?? '?'} (Paystack link next).`;
+  }
+  if (definition.name === 'start_wallet_payout') {
+    return `Start a withdrawal of ₦${params.amountNaira ?? params.amount ?? '?'} to your saved bank (OTP emailed next).`;
+  }
+  if (definition.name === 'mark_all_notifications_read') {
+    return 'Mark all notifications as read on this account.';
+  }
+  if (definition.name === 'change_password') {
+    return 'Change the password on this signed-in account (secrets are not stored in chat logs).';
+  }
+  if (definition.name === 'request_password_reset_email') {
+    return 'Email a password reset link to the address already on this account.';
+  }
+  if (definition.name === 'submit_nin_verification') {
+    return 'Submit NIN verification for this account.';
+  }
+  if (definition.name === 'add_bank_account') {
+    return `Save bank account ending ${params.accountNumber?.slice(-4) ?? '????'} on this account.`;
+  }
+  if (definition.name === 'remove_bank_account') {
+    return `Remove bank account ${params.bankAccountId ?? '(selected)'} from this account.`;
+  }
+  if (definition.name === 'set_primary_bank_account') {
+    return `Set bank account ${params.bankAccountId ?? '(selected)'} as primary.`;
+  }
+  return `Run ${definition.name.replaceAll('_', ' ')}.`;
 }
