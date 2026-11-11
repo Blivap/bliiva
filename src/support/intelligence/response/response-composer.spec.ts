@@ -34,33 +34,29 @@ describe('composeResponse greeting', () => {
   it('includes the user name when provided', () => {
     const result = composeResponse(greetDecision(), { userName: 'Ada' });
     expect(result.content).toBe(
-      'Hi Ada — I’m Blivap’s official AI support assistant. How can I help?',
+      'Hi Ada — I’m Bliiva, Blivap’s official AI support assistant. How can I help?',
     );
   });
 
   it('falls back when no name is available', () => {
     const result = composeResponse(greetDecision());
     expect(result.content).toBe(
-      'Hi — I’m Blivap’s official AI support assistant. How can I help?',
+      'Hi — I’m Bliiva, Blivap’s official AI support assistant. How can I help?',
     );
   });
 });
 
-describe('composeResponse out-of-scope fallback', () => {
-  it('asks for an app or problem question without offering a specialist', () => {
+describe('composeResponse fallback', () => {
+  it('uses a temporary error when the model did not answer', () => {
     const decision: SupportDecision = {
       ...greetDecision(),
       kind: SupportDecisionKind.Fallback,
       responseType: OrchestratorResponseType.Unsupported,
-      reason: 'disallowed_topic',
+      reason: 'low_confidence',
       confidence: 0,
     };
     const result = composeResponse(decision);
-    expect(result.content).toContain(
-      'Please ask a question about the Blivap app',
-    );
-    expect(result.content.toLowerCase()).not.toContain('authorities');
+    expect(result.content).toContain('Try again shortly');
     expect(result.content.toLowerCase()).not.toContain('specialist');
-    expect(result.content.toLowerCase()).not.toContain('report');
   });
 });

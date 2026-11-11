@@ -1,6 +1,11 @@
 import type { ClarificationOption } from '../interfaces/decision.interface.js';
 import { normalizeText } from '../text/text-normalizer.js';
 import type { UtteranceSignals } from '../text/utterances.js';
+import {
+  botOfferedAction,
+  isGoAhead,
+  priorUserAskedForLiveData,
+} from './offered-action.js';
 
 export type ConversationContextMode =
   | 'idle'
@@ -13,11 +18,19 @@ export type ConversationContextMode =
 
 export interface PendingClarification {
   kind:
-    'intent' | 'knowledge' | 'follow_up' | 'action_resource' | 'action_confirm';
+    | 'intent'
+    | 'knowledge'
+    | 'follow_up'
+    | 'action_resource'
+    | 'action_confirm'
+    | 'action_offer'
+    | 'escalation_confirm';
   question: string;
   options: ClarificationOption[];
   actionName?: string;
   confirmationId?: string;
+  escalationReason?: string;
+  priority?: string;
 }
 
 export interface ConversationContextState {
@@ -135,7 +148,9 @@ function readPending(value: unknown): PendingClarification | null {
     pending.kind !== 'knowledge' &&
     pending.kind !== 'follow_up' &&
     pending.kind !== 'action_resource' &&
-    pending.kind !== 'action_confirm'
+    pending.kind !== 'action_confirm' &&
+    pending.kind !== 'action_offer' &&
+    pending.kind !== 'escalation_confirm'
   ) {
     return null;
   }
@@ -159,6 +174,11 @@ function readPending(value: unknown): PendingClarification | null {
       typeof pending.confirmationId === 'string'
         ? pending.confirmationId
         : undefined,
+    escalationReason:
+      typeof pending.escalationReason === 'string'
+        ? pending.escalationReason
+        : undefined,
+    priority: typeof pending.priority === 'string' ? pending.priority : undefined,
   };
 }
 
@@ -176,12 +196,40 @@ export function resolvePendingReply(
   const pending = state.pendingClarification;
   if (!pending) return { type: 'none' };
 
+  // Confirmations / offered lookups: yes, soft ack, and "do it" all proceed.
   if (
-    utterance.affirmation &&
-    (pending.kind === 'follow_up' || pending.kind === 'action_confirm')
+    pending.kind === 'action_confirm' ||
+    pending.kind === 'action_offer' ||
+    pending.kind === 'escalation_confirm'
   ) {
-    return { type: 'affirm' };
+    if (
+      utterance.affirmation ||
+      utterance.softAck ||
+      utterance.actionGoAhead ||
+      isGoAhead(utterance, normalized)
+    ) {
+      return { type: 'affirm' };
+    }
   }
+
+  // Post-answer "Anything else?":
+  // - If the bot offered a lookup, OR the prior user ask was live data
+  //   (balance/bookings/…) and they say yes — accept as go-ahead.
+  // - soft ack / thanks → done (affirm → Close)
+  // - bare "yes" with no offer/prior ask → stay open (reject)
+  if (pending.kind === 'follow_up') {
+    if (
+      isGoAhead(utterance, normalized) &&
+      (botOfferedAction(state.lastBotResponse) ||
+        priorUserAskedForLiveData(state.lastUserMessage))
+    ) {
+      return { type: 'affirm' };
+    }
+    if (utterance.actionGoAhead) return { type: 'none' };
+    if (utterance.softAck || utterance.closing) return { type: 'affirm' };
+    if (utterance.affirmation) return { type: 'reject' };
+  }
+
   if (
     (utterance.negation || utterance.correction) &&
     !utterance.correctionRemainder
@@ -194,7 +242,10 @@ export function resolvePendingReply(
   if (utterance.selection && pending.options[0]) {
     return { type: 'select', option: pending.options[0] };
   }
-  if (utterance.affirmation && pending.options.length === 1) {
+  if (
+    (utterance.affirmation || utterance.softAck || utterance.actionGoAhead) &&
+    pending.options.length === 1
+  ) {
     return { type: 'select', option: pending.options[0] };
   }
 

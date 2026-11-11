@@ -12,13 +12,13 @@ describe('withActionGuidance', () => {
     expect(text).toContain('Wallet');
   });
 
-  it('suggests retrying or a specialist only after a failed lookup', () => {
+  it('asks the user to retry after a failed lookup without a fake yes-trap', () => {
     const text = withActionGuidance(
       'get_donations',
       'I couldn’t reach your Blivap account just now.',
       'failed',
     );
-    expect(text).toContain('keeps failing');
-    expect(text).toContain('specialist');
+    expect(text).toContain('try again');
+    expect(text.toLowerCase()).not.toContain('say yes');
   });
 });

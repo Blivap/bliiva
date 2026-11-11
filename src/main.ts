@@ -57,8 +57,20 @@ async function bootstrap() {
   }
 
   await app.listen(port);
+  const llmEnabled = config.get<boolean>('llm.enabled', false);
+  const llmModel = config.get<string>('llm.model', 'unknown');
   Logger.log(
     `Bliiva Support API listening on http://localhost:${port}/${apiPrefix}`,
+    'Bootstrap',
+  );
+  Logger.log(
+    JSON.stringify({
+      event: 'support.ai.status',
+      aiActive: llmEnabled,
+      model: llmEnabled ? llmModel : null,
+      provider: config.get<string>('llm.provider', 'ollama'),
+      baseUrl: config.get<string>('llm.baseUrl', ''),
+    }),
     'Bootstrap',
   );
   if (swaggerEnabled) {

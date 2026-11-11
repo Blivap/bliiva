@@ -7,6 +7,13 @@ import {
   emptyContext,
   type ConversationContextState,
 } from '../intelligence/context/conversation-context.js';
+import {
+  inferImmediateLiveDataAction,
+  pendingFromBotOffer,
+} from '../intelligence/context/offered-action.js';
+import { resolveIntelligenceSettings } from '../intelligence/intelligence-settings.js';
+import { rankKnowledge } from '../intelligence/retrieval/rank-knowledge.js';
+import { KnowledgeCatalogService } from '../knowledge/knowledge-catalog.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import {
   buildKnowledgePrompt,
@@ -14,7 +21,7 @@ import {
   buildSystemPrompt,
   buildToolPrompt,
 } from '../llm/prompts/index.js';
-import { SCOPE_REDIRECT_MESSAGE } from '../intelligence/response/response-composer.js';
+import { ESCALATION_OFFER_QUESTION } from '../intelligence/response/response-composer.js';
 import {
   detectPromptInjection,
   redactForPrompt,
@@ -22,7 +29,7 @@ import {
 } from '../llm/redaction.js';
 import { LlmError, type LlmMessage } from '../llm/llm.types.js';
 import { RagService } from '../rag/rag.service.js';
-import { sharesGrounding } from '../rag/retrieval/hybrid-rank.js';
+import type { RetrievedChunk } from '../rag/rag.types.js';
 import { ToolsExecutor } from '../tools/tools.executor.js';
 import { ToolsRegistry } from '../tools/tools.registry.js';
 import type {
@@ -40,6 +47,7 @@ export class SupportAgentService {
     private readonly rag: RagService,
     private readonly tools: ToolsRegistry,
     private readonly executor: ToolsExecutor,
+    private readonly catalog: KnowledgeCatalogService,
   ) {}
 
   enabled(): boolean {
@@ -67,12 +75,31 @@ export class SupportAgentService {
     if (detectPromptInjection(input.content)) {
       return {
         ...base,
-        outcome: 'escalate',
-        escalate: true,
+        outcome: 'answered',
+        escalate: false,
         escalationReason: 'prompt_injection',
-        responseType: OrchestratorResponseType.Escalated,
-        content: 'I can’t do that. Want a human specialist?',
+        responseType: OrchestratorResponseType.ClarificationRequired,
+        content: `I can’t do that. ${ESCALATION_OFFER_QUESTION}`,
         reason: 'prompt_injection',
+        context: offerEscalationContext(input.context, 'prompt_injection'),
+        latencyMs: Date.now() - started,
+      };
+    }
+
+    // After handoff, never resume product help — specialist owns the thread.
+    if (input.context.specialistNotified) {
+      return {
+        ...base,
+        outcome: 'answered',
+        responseType: OrchestratorResponseType.HumanHandling,
+        content: '',
+        reason: 'specialist_notified',
+        context: {
+          ...input.context,
+          conversationState: 'escalated',
+          pendingClarification: null,
+          currentIntent: null,
+        },
         latencyMs: Date.now() - started,
       };
     }
@@ -95,15 +122,38 @@ export class SupportAgentService {
           category: input.category ?? undefined,
           keywordOnly: true,
         });
-    const chunks = retrieval.chunks.map((chunk) => ({
+    let chunks = retrieval.chunks.map((chunk) => ({
       ...chunk,
       content: this.rag.clip(chunk.content),
     }));
+    // When RAG is off or empty (common on small Ollama hosts), still ground
+    // how-to answers with the published Phase 2 knowledge catalog.
+    if (!conversational && chunks.length === 0) {
+      chunks = await this.catalogKnowledgeChunks(
+        input.content,
+        input.category ?? null,
+        input.context.currentIntent ?? null,
+      );
+    }
 
+    const toolDefs = useTools ? this.tools.list() : [];
+    const actionCatalog = useTools
+      ? this.tools
+          .list()
+          .map((tool) => this.tools.get(tool.name))
+          .filter((action): action is NonNullable<typeof action> =>
+            Boolean(action),
+          )
+      : [];
     const messages: LlmMessage[] = [
       { role: 'system', content: buildSystemPrompt() },
       ...(useTools
-        ? [{ role: 'system' as const, content: buildToolPrompt() }]
+        ? [
+            {
+              role: 'system' as const,
+              content: buildToolPrompt(actionCatalog),
+            },
+          ]
         : []),
       {
         role: 'system',
@@ -116,6 +166,15 @@ export class SupportAgentService {
           })),
         ),
       },
+      ...(!input.context.currentIntent
+        ? [
+            {
+              role: 'system' as const,
+              content:
+                'No active task. Answer only this message. Do not reopen a prior balance/bookings/verification offer unless they ask again.',
+            },
+          ]
+        : []),
       ...trimHistory(input.history, llm.maxContextMessages).map((message) => ({
         role: message.role,
         content: redactForPrompt(message.content),
@@ -123,7 +182,7 @@ export class SupportAgentService {
       { role: 'user', content: buildSupportTurn(redactedUser) },
     ];
 
-    const tools = useTools ? this.tools.list() : [];
+    const tools = toolDefs;
     let toolCalls = 0;
     let promptTokens: number | null = null;
     let completionTokens: number | null = null;
@@ -145,6 +204,74 @@ export class SupportAgentService {
 
         if (response.toolCalls.length === 0) {
           const answer = sanitizeAnswer(response.message.content);
+          // Clear live-data asks must never become “Want me to show it?” —
+          // run the allowlisted lookup now when the model skipped tools.
+          const forced =
+            useTools && !conversational && toolCalls === 0
+              ? inferImmediateLiveDataAction(input.content)
+              : null;
+          if (forced) {
+            const forcedResult = await this.executor.execute({
+              name: forced.actionName,
+              arguments: forced.params,
+              conversationId: input.conversationId,
+              actor: input.actor,
+              context: nextContext,
+              confirmationId: input.confirmationId,
+            });
+            toolCalls += 1;
+            this.logger.log(
+              JSON.stringify({
+                event: 'support.agent.forced_tool',
+                conversationId: input.conversationId,
+                action: forced.actionName,
+                status: forcedResult.status,
+              }),
+            );
+            if (forcedResult.status === ActionStatus.Success) {
+              nextContext = {
+                ...nextContext,
+                conversationState: 'answered',
+                unsuccessfulAttempts: 0,
+                pendingClarification: {
+                  kind: 'follow_up',
+                  question: 'Anything else?',
+                  options: [
+                    {
+                      intent:
+                        nextContext.currentIntent ?? 'GENERAL_ENQUIRY',
+                      label: 'yes',
+                    },
+                    {
+                      intent: 'REQUEST_HUMAN',
+                      label: 'no I need more help',
+                    },
+                  ],
+                },
+                pendingActionName: null,
+                pendingActionParams: {},
+                pendingConfirmationId: null,
+              };
+              return {
+                ...base,
+                outcome: 'answered',
+                responseType: OrchestratorResponseType.Answered,
+                content: forcedResult.message,
+                reason: 'forced_live_data_action',
+                context: nextContext,
+                knowledgeRefs: knowledgeRefs(chunks),
+                chunks,
+                toolCalls,
+                model,
+                promptTokens,
+                completionTokens,
+                retrievalDurationMs: retrieval.durationMs,
+                latencyMs: Date.now() - started,
+              };
+            }
+            // Fall through to model text / offer handling if force failed.
+          }
+
           if (!answer) {
             return {
               ...base,
@@ -161,54 +288,15 @@ export class SupportAgentService {
             };
           }
 
-          if (
-            chunks.length === 0 &&
-            !looksLikeIdentityAnswer(answer) &&
-            toolCalls === 0
-          ) {
-            // No grounding and no tools — redirect to Blivap help, never open a ticket.
-            return {
-              ...base,
-              outcome: 'answered',
-              escalate: false,
-              responseType: OrchestratorResponseType.Answered,
-              content: SCOPE_REDIRECT_MESSAGE,
-              reason: 'out_of_scope',
-              model,
-              promptTokens,
-              completionTokens,
-              retrievalDurationMs: retrieval.durationMs,
-              knowledgeRefs: [],
-              chunks,
-              toolCalls,
-              latencyMs: Date.now() - started,
-            };
-          }
-
-          if (
-            chunks.length > 0 &&
-            toolCalls === 0 &&
-            !sharesGrounding(
-              answer,
-              chunks.map((chunk) => chunk.content),
-            ) &&
-            looksLikePolicyClaim(answer)
-          ) {
-            return {
-              ...base,
-              outcome: 'fallback',
-              reason: 'ungrounded_answer',
-              model,
-              promptTokens,
-              completionTokens,
-              retrievalDurationMs: retrieval.durationMs,
-              knowledgeRefs: knowledgeRefs(chunks),
-              chunks,
-              toolCalls,
-              latencyMs: Date.now() - started,
-            };
-          }
-
+          // Never park a clear live-data ask as an action_offer — execute above
+          // already handled offers; if force failed, strip offer framing.
+          const offer =
+            conversational || forced
+              ? null
+              : pendingFromBotOffer({
+                  botContent: answer,
+                  currentIntent: nextContext.currentIntent,
+                });
           nextContext = {
             ...nextContext,
             conversationState: 'answered',
@@ -217,17 +305,34 @@ export class SupportAgentService {
               ...nextContext.presentedKnowledgeIds,
               ...chunks.map((chunk) => chunk.documentId),
             ].slice(-10),
-            pendingClarification: {
-              kind: 'follow_up',
-              question: 'Anything else?',
-              options: [
-                {
-                  intent: nextContext.currentIntent ?? 'GENERAL_ENQUIRY',
-                  label: 'yes',
-                },
-                { intent: 'REQUEST_HUMAN', label: 'no I need more help' },
-              ],
-            },
+            // Soft acks / presence: no follow-up trap.
+            // If the model offered to show/check something, remember that
+            // offer so the next "yes" runs the action instead of looping.
+            pendingClarification: conversational
+              ? null
+              : offer
+                ? {
+                    kind: 'action_offer',
+                    question: offer.question,
+                    options: offer.options,
+                    actionName: offer.actionName,
+                  }
+                : {
+                    kind: 'follow_up',
+                    question: 'Anything else?',
+                    options: [
+                      {
+                        intent:
+                          nextContext.currentIntent ?? 'GENERAL_ENQUIRY',
+                        label: 'yes',
+                      },
+                      {
+                        intent: 'REQUEST_HUMAN',
+                        label: 'no I need more help',
+                      },
+                    ],
+                  },
+            pendingActionName: offer?.actionName ?? nextContext.pendingActionName,
           };
 
           return {
@@ -250,16 +355,17 @@ export class SupportAgentService {
 
         if (round >= llm.maxToolCalls) {
           const deadEnd = input.context.unsuccessfulAttempts >= 1;
+          const attempts = input.context.unsuccessfulAttempts + 1;
           return {
             ...base,
-            outcome: deadEnd ? 'escalate' : 'answered',
-            escalate: deadEnd,
+            outcome: 'answered',
+            escalate: false,
             escalationReason: deadEnd ? 'tool_loop_limit' : null,
             responseType: deadEnd
-              ? OrchestratorResponseType.Escalated
+              ? OrchestratorResponseType.ClarificationRequired
               : OrchestratorResponseType.Answered,
             content: deadEnd
-              ? 'I still couldn’t finish that lookup. I can connect you to a specialist.'
+              ? `I still couldn’t finish that lookup. ${ESCALATION_OFFER_QUESTION}`
               : 'I couldn’t finish that lookup. Please try again, or tell me another detail to check.',
             reason: 'tool_loop_limit',
             model,
@@ -270,11 +376,16 @@ export class SupportAgentService {
             chunks,
             toolCalls,
             latencyMs: Date.now() - started,
-            context: {
-              ...nextContext,
-              unsuccessfulAttempts: input.context.unsuccessfulAttempts + 1,
-              conversationState: 'clarifying',
-            },
+            context: deadEnd
+              ? offerEscalationContext(
+                  { ...nextContext, unsuccessfulAttempts: attempts },
+                  'tool_loop_limit',
+                )
+              : {
+                  ...nextContext,
+                  unsuccessfulAttempts: attempts,
+                  conversationState: 'clarifying',
+                },
           };
         }
 
@@ -376,13 +487,14 @@ export class SupportAgentService {
           }
 
           if (result.status === ActionStatus.Failed && result.escalate) {
+            const reason = result.failureCode ?? 'tool_failed';
             return {
               ...base,
-              outcome: 'escalate',
-              escalate: true,
-              escalationReason: result.failureCode ?? 'tool_failed',
-              responseType: OrchestratorResponseType.Escalated,
-              content: result.message,
+              outcome: 'answered',
+              escalate: false,
+              escalationReason: reason,
+              responseType: OrchestratorResponseType.ClarificationRequired,
+              content: [result.message, ESCALATION_OFFER_QUESTION].join('\n\n'),
               reason: 'tool_failed',
               knowledgeRefs: knowledgeRefs(chunks),
               chunks,
@@ -392,6 +504,7 @@ export class SupportAgentService {
               completionTokens,
               retrievalDurationMs: retrieval.durationMs,
               latencyMs: Date.now() - started,
+              context: offerEscalationContext(nextContext, reason),
             };
           }
 
@@ -454,6 +567,73 @@ export class SupportAgentService {
       };
     }
   }
+
+  private async catalogKnowledgeChunks(
+    text: string,
+    category: string | null,
+    intent: string | null,
+  ): Promise<RetrievedChunk[]> {
+    try {
+      const entries = await this.catalog.getPublished();
+      const settings = resolveIntelligenceSettings({});
+      const ranking = rankKnowledge({
+        text,
+        entries,
+        intent,
+        category,
+        settings,
+      });
+      // Soften the Phase 2 auto-answer bar slightly: the LLM still has to
+      // ground on the note, and intent may be unknown on the agent path.
+      const groundedFloor = Math.min(0.4, settings.knowledgeMinScore);
+      const picks = ranking.ambiguous
+        ? ranking.matches.slice(0, 2)
+        : ranking.best
+          ? [ranking.best]
+          : ranking.matches[0] && ranking.matches[0].score >= groundedFloor
+            ? [ranking.matches[0]]
+            : [];
+      return picks.map((match, index) => ({
+        id: `${match.knowledgeId}:${index}`,
+        documentId: match.knowledgeId,
+        title: match.title,
+        category: match.category,
+        version: 1,
+        chunkIndex: index,
+        content: this.rag.clip(match.answer),
+        score: match.score,
+        embeddingModel: 'catalog',
+      }));
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'support.agent.catalog_knowledge_failed',
+          message: error instanceof Error ? error.message : 'unknown',
+        }),
+      );
+      return [];
+    }
+  }
+}
+
+function offerEscalationContext(
+  context: ConversationContextState,
+  reason: string,
+): ConversationContextState {
+  return {
+    ...context,
+    conversationState: 'clarifying',
+    pendingClarification: {
+      kind: 'escalation_confirm',
+      question: ESCALATION_OFFER_QUESTION,
+      options: [
+        { intent: 'REQUEST_HUMAN', label: 'yes' },
+        { intent: 'GENERAL_ENQUIRY', label: 'no' },
+      ],
+      escalationReason: reason,
+      priority: 'medium',
+    },
+  };
 }
 
 function emptyResult(
@@ -505,33 +685,51 @@ function knowledgeRefs(
 }
 
 function sanitizeAnswer(value: string): string {
-  const cleaned = value
+  let cleaned = value
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<\/?think>/gi, '')
     .replace(/\b(password|otp|access token)\s*[:=]\s*\S+/gi, '$1: [redacted]')
     .trim();
-  // Never surface "report to authorities" lectures if the model slips.
-  if (
-    /\b(report (this )?to (the )?(appropriate )?authorities|violates? (our |platform )?polic)/i.test(
-      cleaned,
-    )
-  ) {
-    return SCOPE_REDIRECT_MESSAGE;
+
+  // Drop leaked chain-of-thought when the model wrote planning instead of a reply.
+  if (looksLikeLeakedReasoning(cleaned)) {
+    cleaned = stripLeakedReasoning(cleaned);
   }
+
   return cleaned.slice(0, 4000);
 }
 
-function looksLikePolicyClaim(answer: string): boolean {
-  return /\b(policy|must|required|blivap|procedure|register|wallet|donation|hospital|appointment)\b/i.test(
-    answer,
+function looksLikeLeakedReasoning(value: string): boolean {
+  return /\b(okay,? let'?s see|alright,? let'?s (see|go)|the (user|customer) (sent|said|asked)|i (should|need to) (check|reply|respond|call|see|acknowledge|inform)|i('ll| will) (reply|respond|make sure|assume)|let me (call|check|see|reply)|looking at the tools|available tools|there('s| is) a function|tools provided|no tools? (are |is )?needed|warm,? calm|plain language tone|knowledge notes|chain[- ]of[- ]thought|first,? i (should|need to)|invite them to ask|not explicitly listed)\b/i.test(
+    value,
   );
 }
 
-function looksLikeIdentityAnswer(answer: string): boolean {
-  return /\b(ai|assistant|bot|support)\b/i.test(answer);
+function stripLeakedReasoning(value: string): string {
+  const parts = value
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const kept = parts.filter((part) => !looksLikeLeakedReasoning(part));
+  if (kept.length > 0) return kept.join('\n\n').trim();
+
+  // Single-block leak with no separable reply — hide it entirely.
+  return '';
 }
 
 function isConversational(text: string): boolean {
-  return /\b((what is|whats|who is) your name|who are you|what are you called|are you (an?|and)?\s*(ai|bot|robot|assistant|llm)|are you (real|human)|is this (an? )?(ai|bot)|how are you|thanks|thank you|hello|hi)\b/i.test(
+  const trimmed = text.trim();
+  if (/^(bliiva|blivap)[.!]?$/i.test(trimmed)) {
+    return true;
+  }
+  if (
+    /^(?:(?:bliiva|blivap)\s+)?(ok|okay|alright|all right|sure|got it|cool|great|thanks|thank you|thank you very much|hello|hi|hey|are you there|you there|anybody there|anyone there|still there|you around|are you around|can you hear me)(?:\s+(?:bliiva|blivap))?[.!]?$/i.test(
+      trimmed,
+    )
+  ) {
+    return true;
+  }
+  return /\b((what is|whats|who is) your name|who are you|what are you|what are you called|what can you do|what do you do|how can you help|are you (an?|and)?\s*(ai|bot|robot|assistant|llm)|are you (real|human|there|around)|is this (an? )?(ai|bot)|how are you|thanks|thank you|hello|hi)\b/i.test(
     text,
   );
 }

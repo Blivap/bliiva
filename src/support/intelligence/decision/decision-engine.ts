@@ -173,27 +173,6 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
     });
   }
 
-  if (
-    safety.emergency ||
-    intent?.escalationPolicy === EscalationPolicy.Emergency
-  ) {
-    return decision({
-      kind: SupportDecisionKind.Emergency,
-      responseType: OrchestratorResponseType.Escalated,
-      reason: 'medical_emergency',
-      intent: intent?.name ?? recognition.intent,
-      category: intent?.category ?? category ?? 'human_support',
-      confidence,
-      knowledge: knowledge.best,
-      clarificationOptions: [],
-      escalationReason: 'medical_emergency',
-      priority: Priority.Urgent,
-      appendDisclaimer: true,
-      empathetic,
-      countsAsUnresolved: false,
-    });
-  }
-
   const escalate = (reason: string, priority: Priority): SupportDecision =>
     decision({
       kind: SupportDecisionKind.Escalate,
@@ -212,23 +191,60 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
         reason === 'repeated_failure' || reason === 'frustrated_unresolved',
     });
 
+  // Ask first; open a ticket only after the user says yes.
+  // Explicit "talk to a human" already counts as affirmation.
+  const offerEscalate = (
+    reason: string,
+    priority: Priority,
+    extras: { appendDisclaimer?: boolean; category?: string | null } = {},
+  ): SupportDecision =>
+    decision({
+      kind: SupportDecisionKind.OfferEscalate,
+      responseType: OrchestratorResponseType.ClarificationRequired,
+      reason,
+      intent: intent?.name ?? recognition.intent,
+      category: extras.category ?? intent?.category ?? category,
+      confidence,
+      knowledge: knowledge.best,
+      clarificationOptions: [
+        { intent: 'REQUEST_HUMAN', label: 'yes' },
+        { intent: 'GENERAL_ENQUIRY', label: 'no' },
+      ],
+      escalationReason: reason,
+      priority,
+      appendDisclaimer: extras.appendDisclaimer ?? appendDisclaimer,
+      empathetic,
+      countsAsUnresolved:
+        reason === 'repeated_failure' || reason === 'frustrated_unresolved',
+    });
+
+  if (
+    safety.emergency ||
+    intent?.escalationPolicy === EscalationPolicy.Emergency
+  ) {
+    return offerEscalate('medical_emergency', Priority.Urgent, {
+      appendDisclaimer: true,
+      category: intent?.category ?? category ?? 'human_support',
+    });
+  }
+
   if (safety.humanRequested || intent?.name === 'REQUEST_HUMAN') {
     return escalate('human_requested', Priority.Medium);
   }
   if (safety.securityIncident || intent?.name === 'SECURITY_INCIDENT') {
-    return escalate('security_incident', Priority.Urgent);
+    return offerEscalate('security_incident', Priority.Urgent);
   }
   if (
     safety.unauthorizedTransaction ||
     intent?.name === 'WALLET_UNAUTHORIZED'
   ) {
-    return escalate('unauthorized_transaction', Priority.Urgent);
+    return offerEscalate('unauthorized_transaction', Priority.Urgent);
   }
   if (safety.seriousComplaint || intent?.name === 'COMPLAINT') {
-    return escalate('serious_complaint', Priority.High);
+    return offerEscalate('serious_complaint', Priority.High);
   }
   if (safety.personalClinicalDecision) {
-    return escalate('personal_clinical_decision', Priority.High);
+    return offerEscalate('personal_clinical_decision', Priority.High);
   }
   const sensitivePolicy =
     intent?.escalationPolicy === EscalationPolicy.EscalateImmediately ||
@@ -236,10 +252,10 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
       intent.escalationPolicy !== EscalationPolicy.AnswerFromKnowledge &&
       intent.escalationPolicy !== EscalationPolicy.ActionThenClarify);
   if (sensitivePolicy) {
-    return escalate('sensitive_intent', Priority.High);
+    return offerEscalate('sensitive_intent', Priority.High);
   }
   if (knowledge.best?.requiresHumanSupport) {
-    return escalate('knowledge_requires_human', Priority.Medium);
+    return offerEscalate('knowledge_requires_human', Priority.Medium);
   }
 
   if (input.unsupportedActionReason) {
@@ -283,13 +299,11 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
     });
   }
 
-  const preferAction =
-    Boolean(input.actionName) &&
-    !recognition.requiresClarification &&
-    confidence >= settings.clarificationMinConfidence &&
-    (intent?.escalationPolicy === EscalationPolicy.ActionThenClarify ||
-      Boolean(input.actionName));
-  if (preferAction && input.actionName) {
+  // If the resolver already picked an action (including “do it” after an
+  // offered step), run it even when recognition is empty/low-confidence.
+  // Short follow-ups like "yes do it" often have requiresClarification=true
+  // from emptyResult — that must not block the action.
+  if (input.actionName) {
     return decision({
       kind: SupportDecisionKind.RunAction,
       responseType: OrchestratorResponseType.ActionCompleted,
@@ -329,10 +343,10 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
     : [];
 
   if (input.followUpFailure && context.conversationState === 'answered') {
-    return escalate('follow_up_unresolved', Priority.Medium);
+    return offerEscalate('follow_up_unresolved', Priority.Medium);
   }
   if (input.repeatCount >= settings.maxRepeatedQuestions) {
-    return escalate('repeated_question', Priority.Medium);
+    return offerEscalate('repeated_question', Priority.Medium);
   }
 
   const canAnswer =
@@ -369,10 +383,10 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
     context.unsuccessfulAttempts >= 1 &&
     confidence < settings.autoHandleMinConfidence
   ) {
-    return escalate('frustrated_unresolved', Priority.Medium);
+    return offerEscalate('frustrated_unresolved', Priority.Medium);
   }
   if (context.unsuccessfulAttempts >= settings.maxClarificationAttempts) {
-    return escalate('repeated_failure', Priority.Medium);
+    return offerEscalate('repeated_failure', Priority.Medium);
   }
 
   const shouldClarify =

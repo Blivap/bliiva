@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AiModule } from '../ai/ai.module.js';
 import { KnowledgeModule } from '../knowledge/knowledge.module.js';
@@ -27,7 +27,7 @@ import { AiSettingsService } from '../ai/ai-settings.service.js';
 @Module({
   imports: [
     AiModule,
-    KnowledgeModule,
+    forwardRef(() => KnowledgeModule),
     MongooseModule.forFeature([
       { name: SupportKnowledgeChunk.name, schema: SupportKnowledgeChunkSchema },
     ]),

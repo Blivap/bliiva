@@ -13,6 +13,8 @@ import { OllamaClient } from './ollama.client.js';
 export class OllamaProvider implements LlmProvider {
   readonly name = 'ollama';
   private client: OllamaClient | null = null;
+  private clientBaseUrl: string | null = null;
+  private clientModel: string | null = null;
 
   constructor(private readonly settings: AiSettingsService) {}
 
@@ -59,9 +61,14 @@ export class OllamaProvider implements LlmProvider {
 
   private runtime(): OllamaClient {
     const current = this.settings.current().llm;
-    if (!this.client) {
+    const baseUrl = current.baseUrl.replace(/\/$/, '');
+    const needsRebuild =
+      !this.client ||
+      this.clientBaseUrl !== baseUrl ||
+      this.clientModel !== current.model;
+    if (needsRebuild) {
       this.client = new OllamaClient({
-        baseUrl: current.baseUrl.replace(/\/$/, ''),
+        baseUrl,
         timeoutMs: current.timeoutMs,
         model: current.model,
         temperature: current.temperature,
@@ -69,7 +76,9 @@ export class OllamaProvider implements LlmProvider {
         numCtx: current.numCtx,
         keepAlive: current.keepAlive,
       });
+      this.clientBaseUrl = baseUrl;
+      this.clientModel = current.model;
     }
-    return this.client;
+    return this.client!;
   }
 }

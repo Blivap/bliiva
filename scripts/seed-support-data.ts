@@ -4,7 +4,7 @@
  *   yarn seed:support
  *
  * Safe to re-run. Existing intents are updated in place by name.
- * Knowledge is upserted by intent + language + version 1.
+ * Knowledge is upserted by title + language + version 1.
  * Entries are not auto-published from conversations; this seed is the
  * reviewed starter set.
  *
@@ -46,7 +46,7 @@ async function seed() {
   for (const entry of blivapKnowledge) {
     const { id: _id, ...fields } = entry;
     await knowledge.updateOne(
-      { intent: entry.intent, language: entry.language, version: 1 },
+      { title: entry.title, language: entry.language, version: 1 },
       {
         $set: {
           ...fields,

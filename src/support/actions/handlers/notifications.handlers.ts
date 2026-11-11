@@ -79,6 +79,14 @@ export class ListNotificationsHandler implements ActionHandler {
         }),
       ].join('\n'),
       data: { count: rows.length, unread },
+      choices: rows.slice(0, 5).map((row, index) => ({
+        id: row.id,
+        label: `notification ${index + 1}`,
+        params: {
+          notificationId: row.id,
+          followUpAction: 'mark_notification_read',
+        },
+      })),
       resourceType: 'notification',
     };
   }

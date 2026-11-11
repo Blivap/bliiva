@@ -15,7 +15,11 @@ import {
 import { withActionGuidance } from '../../actions/action-guidance.js';
 import { ActionsExecutor } from '../../actions/actions.executor.js';
 import { ActionsResolver } from '../../actions/actions.resolver.js';
-import { ActionStatus } from '../../actions/actions.types.js';
+import {
+  ActionStatus,
+  type ActionExecutionResult,
+} from '../../actions/actions.types.js';
+import { extractPendingActionParams } from '../../actions/pending-params.js';
 import { SupportAgentService } from '../../agent/support-agent.service.js';
 import type { SupportAgentTurnResult } from '../../agent/support-agent.types.js';
 import { AnalyticsService } from '../../analytics/analytics.service.js';
@@ -32,6 +36,13 @@ import {
   resolvePendingReply,
   type ConversationContextState,
 } from '../context/conversation-context.js';
+import {
+  botOfferedAction,
+  inferOfferedAction,
+  isGoAhead,
+  pendingFromBotOffer,
+  priorUserAskedForLiveData,
+} from '../context/offered-action.js';
 import { DecisionEngineService } from '../decision/decision-engine.service.js';
 import { IntelligenceSettingsService } from '../intelligence-settings.service.js';
 import {
@@ -47,6 +58,7 @@ import { IntentCatalogService } from '../recognition/intent-catalog.service.js';
 import { RuleBasedRecognizerService } from '../recognition/rule-based-recognizer.service.js';
 import {
   composeResponse,
+  ESCALATION_OFFER_QUESTION,
   temporaryErrorMessage,
 } from '../response/response-composer.js';
 import { KnowledgeRetrievalService } from '../retrieval/knowledge-retrieval.service.js';
@@ -172,16 +184,42 @@ export class SupportOrchestratorService {
     actor: SupportActor,
     started: number,
   ): Promise<OrchestratorTurn> {
-    const context = readContext(conversation.context);
+    let context = readContext(conversation.context);
     const normalized = normalizeText(content);
     const utterance = detectUtterance(normalized);
     const safety = this.safety.inspect(content);
     const closed = conversation.status === ConversationStatus.Closed;
-    // Waiting = ticket queued; keep answering. Only mute when a human is live.
-    const humanHandling = conversation.status === ConversationStatus.Human;
+    // After a ticket is queued (Waiting) or a human is live, stop bot product help.
+    const humanHandling =
+      conversation.status === ConversationStatus.Human ||
+      (conversation.status === ConversationStatus.Waiting &&
+        context.specialistNotified);
     const repeatCount = nextRepeatCount(context, normalized);
     const intents = await this.catalog.getEnabled();
-    const pending = resolvePendingReply(context, normalized, utterance);
+    let pending = resolvePendingReply(context, normalized, utterance);
+
+    // New substantive question abandons a stale “Want me to show…?” offer.
+    if (
+      pending.type === 'none' &&
+      !isGoAhead(utterance, normalized) &&
+      !utterance.softAck &&
+      !utterance.closing &&
+      !utterance.greeting &&
+      normalized.split(/\s+/).length >= 3 &&
+      (context.pendingClarification?.kind === 'action_offer' ||
+        (context.pendingClarification?.kind === 'follow_up' &&
+          botOfferedAction(context.lastBotResponse)))
+    ) {
+      context = {
+        ...context,
+        pendingClarification: null,
+        pendingActionName: null,
+        pendingActionParams: {},
+        pendingConfirmationId: null,
+        currentIntent: null,
+      };
+      pending = { type: 'none' };
+    }
 
     const focusText =
       utterance.correction && utterance.correctionRemainder
@@ -201,6 +239,7 @@ export class SupportOrchestratorService {
     let preferredKnowledgeId: string | null = null;
     let actionParams: Record<string, string> = {
       ...context.pendingActionParams,
+      ...recognition.entities,
     };
     if (pending.type === 'select') {
       if (pending.option.knowledgeId) {
@@ -214,13 +253,31 @@ export class SupportOrchestratorService {
       }
     }
 
-    if (pending.type === 'affirm') {
-      recognition = {
-        ...recognition,
-        intent: context.currentIntent,
-        confidence: 1,
-        requiresClarification: false,
-      };
+    const priorLiveAsk = priorUserAskedForLiveData(context.lastUserMessage);
+    const acceptingOffer =
+      (pending.type === 'affirm' &&
+        (context.pendingClarification?.kind === 'action_confirm' ||
+          context.pendingClarification?.kind === 'action_offer' ||
+          (context.pendingClarification?.kind === 'follow_up' &&
+            (botOfferedAction(context.lastBotResponse) || priorLiveAsk)))) ||
+      (pending.type === 'none' &&
+        isGoAhead(utterance, normalized) &&
+        (botOfferedAction(context.lastBotResponse) || priorLiveAsk));
+
+    // Pin sticky intent when the user accepts an offered lookup/action.
+    if (
+      acceptingOffer ||
+      (pending.type === 'affirm' &&
+        context.pendingClarification?.kind === 'escalation_confirm')
+    ) {
+      if (context.currentIntent) {
+        recognition = {
+          ...recognition,
+          intent: context.currentIntent,
+          confidence: 1,
+          requiresClarification: false,
+        };
+      }
     }
 
     const knowledge = await this.retrieval.retrieve({
@@ -236,21 +293,76 @@ export class SupportOrchestratorService {
       context.pendingClarification?.kind === 'action_confirm' &&
       pending.type === 'affirm';
     const pendingRejectConfirm =
-      context.pendingClarification?.kind === 'action_confirm' &&
+      (context.pendingClarification?.kind === 'action_confirm' ||
+        context.pendingClarification?.kind === 'action_offer') &&
       pending.type === 'reject';
     const pendingResource =
       context.pendingClarification?.kind === 'action_resource' &&
       pending.type === 'select';
+    const pendingEscalateAffirm =
+      context.pendingClarification?.kind === 'escalation_confirm' &&
+      (pending.type === 'affirm' ||
+        (pending.type === 'select' &&
+          pending.option.intent === 'REQUEST_HUMAN'));
+    const pendingEscalateReject =
+      context.pendingClarification?.kind === 'escalation_confirm' &&
+      (pending.type === 'reject' ||
+        (pending.type === 'select' &&
+          pending.option.intent !== 'REQUEST_HUMAN'));
+
+    const pendingOfferAffirm =
+      (context.pendingClarification?.kind === 'action_offer' &&
+        pending.type === 'affirm') ||
+      (context.pendingClarification?.kind === 'follow_up' &&
+        pending.type === 'affirm' &&
+        (botOfferedAction(context.lastBotResponse) || priorLiveAsk)) ||
+      (pending.type === 'none' &&
+        isGoAhead(utterance, normalized) &&
+        (botOfferedAction(context.lastBotResponse) || priorLiveAsk));
 
     if (pendingConfirm && context.pendingActionName) {
       resolvedActionName = context.pendingActionName;
     } else if (pendingResource && context.pendingActionName) {
       resolvedActionName = context.pendingActionName;
-    } else if (!pendingRejectConfirm) {
+    } else if (
+      pending.type === 'none' &&
+      context.pendingClarification?.kind === 'action_resource' &&
+      context.pendingActionName
+    ) {
+      const free = extractPendingActionParams(
+        context.pendingActionName,
+        normalized,
+        content,
+      );
+      if (free) {
+        actionParams = { ...actionParams, ...free };
+        resolvedActionName = context.pendingActionName;
+      }
+    } else if (pendingOfferAffirm) {
+      const offered =
+        (context.pendingClarification?.actionName
+          ? {
+              actionName: context.pendingClarification.actionName,
+              params: {},
+            }
+          : null) ??
+        inferOfferedAction({
+          lastBotResponse: context.lastBotResponse,
+          lastUserMessage: context.lastUserMessage,
+          currentIntent: context.currentIntent ?? recognition.intent,
+          pendingActionName: context.pendingActionName,
+        });
+      if (offered) {
+        resolvedActionName = offered.actionName;
+        actionParams = { ...actionParams, ...offered.params };
+      }
+    } else if (!pendingRejectConfirm && !pendingEscalateAffirm && !pendingEscalateReject) {
       const resolved = this.actionResolver.resolve({
-        intent: recognition.intent,
+        intent: recognition.intent ?? context.currentIntent,
         message: focusText,
         params: actionParams,
+        lastBotResponse: context.lastBotResponse,
+        userGoAhead: isGoAhead(utterance, normalized),
       });
       if (resolved && 'unsupported' in resolved) {
         unsupportedActionReason = resolved.unsupported;
@@ -260,8 +372,8 @@ export class SupportOrchestratorService {
       }
     }
 
-    if (actionParams.followUpAction === 'resend_email_verification') {
-      resolvedActionName = 'resend_email_verification';
+    if (actionParams.followUpAction) {
+      resolvedActionName = actionParams.followUpAction;
     }
 
     const baseDecision = this.decisions.decide({
@@ -282,26 +394,43 @@ export class SupportOrchestratorService {
       unsupportedActionReason,
     });
 
-    // Keep safety/known answers instant. Let the LLM try only when the
-    // rules engine is unsure (Fallback / Clarify). Never let the model
-    // lecture on disallowed topics — redirect is locked.
+    // Keep operational/safety turns instant. Chatty turns (greet, close,
+    // unclear, off-topic) go to the LLM so it can speak in its own words.
     const locked =
       baseDecision.kind === SupportDecisionKind.Emergency ||
       baseDecision.kind === SupportDecisionKind.Escalate ||
+      baseDecision.kind === SupportDecisionKind.OfferEscalate ||
       baseDecision.kind === SupportDecisionKind.HumanHandling ||
       baseDecision.kind === SupportDecisionKind.ClosedConversation ||
-      baseDecision.kind === SupportDecisionKind.Greet ||
-      baseDecision.kind === SupportDecisionKind.Close ||
       baseDecision.kind === SupportDecisionKind.UnsupportedAction ||
       baseDecision.kind === SupportDecisionKind.Authenticate ||
       baseDecision.kind === SupportDecisionKind.Answer ||
-      baseDecision.kind === SupportDecisionKind.RunAction ||
-      baseDecision.reason === 'disallowed_topic';
+      baseDecision.kind === SupportDecisionKind.RunAction;
     const pendingActionFlow =
-      pendingConfirm || pendingRejectConfirm || pendingResource;
+      pendingConfirm ||
+      pendingRejectConfirm ||
+      pendingResource ||
+      pendingEscalateAffirm ||
+      pendingEscalateReject ||
+      pendingOfferAffirm;
+    // Soft acks / bare yes with nothing pending must not reopen tasks or hit the LLM.
+    const softAckIdle =
+      !humanHandling &&
+      !closed &&
+      (utterance.softAck || utterance.affirmation) &&
+      pending.type === 'none' &&
+      !context.pendingClarification;
+    const identityAsk =
+      !humanHandling &&
+      !closed &&
+      utterance.botIdentityAsk &&
+      pending.type === 'none' &&
+      !resolvedActionName;
     if (
       !locked &&
       !pendingActionFlow &&
+      !softAckIdle &&
+      !identityAsk &&
       this.agent?.enabled() &&
       pending.type === 'none'
     ) {
@@ -309,19 +438,40 @@ export class SupportOrchestratorService {
         conversation,
         content,
         actor,
-        context,
+        // Don't ground the LLM on a stale intent when this turn didn't match one.
+        recognition.intent
+          ? context
+          : { ...context, currentIntent: null },
         recognition.category,
+        recognition.intent,
       );
       if (agentTurn) return agentTurn;
     }
-    let decision = locked
-      ? baseDecision
-      : pendingRejectConfirm
+    let decision = pendingEscalateAffirm
+      ? {
+          ...baseDecision,
+          kind: SupportDecisionKind.Escalate,
+          responseType: OrchestratorResponseType.Escalated,
+          reason:
+            context.pendingClarification?.escalationReason ??
+            'human_requested',
+          escalationReason:
+            context.pendingClarification?.escalationReason ??
+            'human_requested',
+          priority: readPriority(
+            context.pendingClarification?.priority,
+            Priority.Medium,
+          ),
+          clarificationOptions: [],
+          countsAsUnresolved: false,
+          actionName: null,
+        }
+      : pendingEscalateReject
         ? {
             ...baseDecision,
             kind: SupportDecisionKind.Answer,
             responseType: OrchestratorResponseType.Answered,
-            reason: 'action_confirmation_cancelled',
+            reason: 'escalation_declined',
             knowledge: null,
             clarificationOptions: [],
             escalationReason: null,
@@ -329,44 +479,113 @@ export class SupportOrchestratorService {
             appendDisclaimer: false,
             actionName: null,
           }
-        : pending.type === 'affirm' &&
-            context.pendingClarification?.kind === 'follow_up'
-          ? {
-              ...baseDecision,
-              kind: SupportDecisionKind.Close,
-              responseType: OrchestratorResponseType.Answered,
-              reason: 'follow_up_confirmed',
-              knowledge: null,
-              clarificationOptions: [],
-              escalationReason: null,
-              countsAsUnresolved: false,
-              appendDisclaimer: false,
-              actionName: null,
-            }
-          : pending.type === 'reject' &&
-              context.pendingClarification?.kind !== 'action_confirm'
+        : locked
+          ? baseDecision
+          : pendingRejectConfirm
             ? {
                 ...baseDecision,
-                kind: SupportDecisionKind.Clarify,
-                responseType: OrchestratorResponseType.ClarificationRequired,
-                reason: 'clarification_rejected',
+                kind: SupportDecisionKind.Answer,
+                responseType: OrchestratorResponseType.Answered,
+                reason: 'action_confirmation_cancelled',
                 knowledge: null,
                 clarificationOptions: [],
                 escalationReason: null,
-                countsAsUnresolved: true,
+                countsAsUnresolved: false,
                 appendDisclaimer: false,
                 actionName: null,
               }
-            : baseDecision;
+            : pending.type === 'affirm' &&
+                context.pendingClarification?.kind === 'follow_up' &&
+                !pendingOfferAffirm &&
+                !resolvedActionName
+              ? {
+                  ...baseDecision,
+                  kind: SupportDecisionKind.Close,
+                  responseType: OrchestratorResponseType.Answered,
+                  reason: 'follow_up_confirmed',
+                  knowledge: null,
+                  clarificationOptions: [],
+                  escalationReason: null,
+                  countsAsUnresolved: false,
+                  appendDisclaimer: false,
+                  actionName: null,
+                  intent: null,
+                }
+              : pending.type === 'reject' &&
+                  context.pendingClarification?.kind === 'follow_up'
+                ? {
+                    ...baseDecision,
+                    kind: SupportDecisionKind.Answer,
+                    responseType: OrchestratorResponseType.Answered,
+                    reason: 'follow_up_more_help',
+                    knowledge: null,
+                    clarificationOptions: [],
+                    escalationReason: null,
+                    countsAsUnresolved: false,
+                    appendDisclaimer: false,
+                    actionName: null,
+                    intent: null,
+                  }
+              : pending.type === 'reject' &&
+                  context.pendingClarification?.kind !== 'action_confirm' &&
+                  context.pendingClarification?.kind !== 'escalation_confirm'
+                ? {
+                    ...baseDecision,
+                    kind: SupportDecisionKind.Clarify,
+                    responseType:
+                      OrchestratorResponseType.ClarificationRequired,
+                    reason: 'clarification_rejected',
+                    knowledge: null,
+                    clarificationOptions: [],
+                    escalationReason: null,
+                    countsAsUnresolved: true,
+                    appendDisclaimer: false,
+                    actionName: null,
+                  }
+                : baseDecision;
 
     let reference: string | null = null;
     let ticketQueued = false;
     let assignedAgentId = conversation.assignedAgentId;
     let status = conversation.status;
+    if (
+      (softAckIdle || identityAsk) &&
+      decision.kind !== SupportDecisionKind.HumanHandling &&
+      decision.kind !== SupportDecisionKind.Escalate &&
+      decision.kind !== SupportDecisionKind.Emergency &&
+      decision.kind !== SupportDecisionKind.ClosedConversation &&
+      decision.kind !== SupportDecisionKind.RunAction &&
+      decision.kind !== SupportDecisionKind.UnsupportedAction
+    ) {
+      decision = {
+        ...baseDecision,
+        kind: SupportDecisionKind.Answer,
+        responseType: OrchestratorResponseType.Answered,
+        reason: identityAsk ? 'bot_identity' : 'soft_ack',
+        knowledge: null,
+        clarificationOptions: [],
+        escalationReason: null,
+        countsAsUnresolved: false,
+        appendDisclaimer: false,
+        actionName: null,
+        intent: null,
+      };
+    }
+
     let actionContent: string | null =
       decision.reason === 'action_confirmation_cancelled'
-        ? 'Cancelled — nothing changed.'
-        : null;
+        ? context.pendingClarification?.kind === 'action_offer'
+          ? 'Okay — I won’t look that up. What else can I help with on Blivap?'
+          : 'Cancelled — nothing changed.'
+        : decision.reason === 'escalation_declined'
+          ? 'Okay — I won’t escalate. How else can I help with Blivap?'
+          : decision.reason === 'follow_up_more_help'
+            ? 'Sure — what else can I help you with on Blivap?'
+            : decision.reason === 'soft_ack'
+              ? 'Alright — I’m here if you need anything on Blivap.'
+              : decision.reason === 'bot_identity'
+                ? "I'm Bliiva — Blivap’s official AI support assistant. I can help with your Blivap account, donations, bookings, wallet, notifications, and more."
+                : null;
     let nextContextOverride: ConversationContextState | null = null;
 
     if (
@@ -472,49 +691,70 @@ export class SupportOrchestratorService {
               : OrchestratorResponseType.Unsupported,
           reason: actionResult.failureCode ?? 'action_completed',
         };
+        const moneyFollowUp = moneyActionFollowUp(
+          actionResult.actionName,
+          actionResult,
+        );
         nextContextOverride = {
           ...context,
-          pendingActionName: null,
-          pendingActionParams: {},
+          pendingActionName: moneyFollowUp?.actionName ?? null,
+          pendingActionParams: moneyFollowUp?.params ?? {},
           pendingConfirmationId: null,
-          conversationState: 'answered',
-          pendingClarification: actionResult.choices?.length
+          conversationState: moneyFollowUp
+            ? 'awaiting_action_parameter'
+            : 'answered',
+          pendingClarification: moneyFollowUp
             ? {
                 kind: 'action_resource',
                 question: actionResult.message,
-                options: actionResult.choices.map((choice) => ({
-                  intent: decision.intent ?? 'GENERAL_ENQUIRY',
-                  label: choice.label,
-                  actionName:
-                    choice.params.followUpAction ??
-                    decision.actionName ??
-                    undefined,
-                  params: choice.params,
-                })),
-                actionName: decision.actionName ?? undefined,
+                options: [],
+                actionName: moneyFollowUp.actionName,
               }
-            : {
-                kind: 'follow_up',
-                question: 'Anything else?',
-                options: [
-                  {
+            : actionResult.choices?.length
+              ? {
+                  kind: 'action_resource',
+                  question: actionResult.message,
+                  options: actionResult.choices.map((choice) => ({
                     intent: decision.intent ?? 'GENERAL_ENQUIRY',
-                    label: 'yes',
-                  },
-                  { intent: 'REQUEST_HUMAN', label: 'no I need more help' },
-                ],
-              },
+                    label: choice.label,
+                    actionName:
+                      choice.params.followUpAction ??
+                      decision.actionName ??
+                      undefined,
+                    params: choice.params,
+                  })),
+                  actionName: decision.actionName ?? undefined,
+                }
+              : {
+                  kind: 'follow_up',
+                  question: 'Anything else?',
+                  options: [
+                    {
+                      intent: decision.intent ?? 'GENERAL_ENQUIRY',
+                      label: 'yes',
+                    },
+                    { intent: 'REQUEST_HUMAN', label: 'no I need more help' },
+                  ],
+                },
           unsuccessfulAttempts: 0,
         };
         if (actionResult.escalate) {
           decision = {
             ...decision,
-            kind: SupportDecisionKind.Escalate,
-            responseType: OrchestratorResponseType.Escalated,
+            kind: SupportDecisionKind.OfferEscalate,
+            responseType: OrchestratorResponseType.ClarificationRequired,
             reason: actionResult.failureCode ?? 'action_escalate',
             escalationReason: actionResult.failureCode ?? 'action_escalate',
             priority: Priority.Medium,
+            clarificationOptions: [
+              { intent: 'REQUEST_HUMAN', label: 'yes' },
+              { intent: 'GENERAL_ENQUIRY', label: 'no' },
+            ],
           };
+          actionContent = [
+            actionResult.message,
+            ESCALATION_OFFER_QUESTION,
+          ].join('\n\n');
         }
       } else if (actionResult.status === ActionStatus.Failed) {
         const attempts = context.unsuccessfulAttempts + 1;
@@ -524,18 +764,39 @@ export class SupportOrchestratorService {
         if (deadEnd) {
           decision = {
             ...decision,
-            kind: SupportDecisionKind.Escalate,
-            responseType: OrchestratorResponseType.Escalated,
+            kind: SupportDecisionKind.OfferEscalate,
+            responseType: OrchestratorResponseType.ClarificationRequired,
             reason: 'action_failed_dead_end',
             escalationReason: 'action_failed_dead_end',
             priority: Priority.Medium,
             countsAsUnresolved: true,
+            clarificationOptions: [
+              { intent: 'REQUEST_HUMAN', label: 'yes' },
+              { intent: 'GENERAL_ENQUIRY', label: 'no' },
+            ],
           };
-          actionContent = withActionGuidance(
-            decision.actionName ?? 'action',
+          actionContent = [
             actionResult.message,
-            'failed',
-          );
+            ESCALATION_OFFER_QUESTION,
+          ].join('\n\n');
+          nextContextOverride = {
+            ...context,
+            pendingActionName: null,
+            pendingActionParams: {},
+            pendingConfirmationId: null,
+            conversationState: 'clarifying',
+            unsuccessfulAttempts: attempts,
+            pendingClarification: {
+              kind: 'escalation_confirm',
+              question: ESCALATION_OFFER_QUESTION,
+              options: [
+                { intent: 'REQUEST_HUMAN', label: 'yes' },
+                { intent: 'GENERAL_ENQUIRY', label: 'no' },
+              ],
+              escalationReason: 'action_failed_dead_end',
+              priority: 'medium',
+            },
+          };
         } else {
           decision = {
             ...decision,
@@ -545,12 +806,30 @@ export class SupportOrchestratorService {
           };
           nextContextOverride = {
             ...context,
-            pendingActionName: null,
-            pendingActionParams: {},
+            pendingActionName: decision.actionName ?? null,
+            pendingActionParams: decision.actionParams ?? {},
             pendingConfirmationId: null,
             conversationState: 'clarifying',
-            pendingClarification: null,
             unsuccessfulAttempts: attempts,
+            // Keep a retryable offer so “yes” / “try again” re-runs the lookup.
+            pendingClarification: decision.actionName
+              ? {
+                  kind: 'action_offer',
+                  question: actionResult.message,
+                  options: [
+                    {
+                      intent: decision.intent ?? 'GENERAL_ENQUIRY',
+                      label: 'yes',
+                      actionName: decision.actionName,
+                    },
+                    {
+                      intent: decision.intent ?? 'GENERAL_ENQUIRY',
+                      label: 'no',
+                    },
+                  ],
+                  actionName: decision.actionName,
+                }
+              : null,
           };
         }
       }
@@ -694,7 +973,10 @@ export class SupportOrchestratorService {
       ? {
           ...nextBase,
           ...nextContextOverride,
-          currentIntent: decision.intent ?? nextBase.currentIntent,
+          currentIntent:
+            decision.intent === null
+              ? null
+              : (decision.intent ?? nextBase.currentIntent),
           previousIntent: context.currentIntent,
           lastUserMessage: content,
           lastUserMessageNormalized: normalized,
@@ -742,7 +1024,12 @@ export class SupportOrchestratorService {
     actor: SupportActor,
     context: ConversationContextState,
     category: string | null,
+    recognizedIntent: string | null = null,
   ): Promise<OrchestratorTurn | null> {
+    // Handoff already started — never resume product help via the LLM.
+    if (context.specialistNotified) {
+      return null;
+    }
     const recent = await this.messages.findRecent(conversation.id, 12);
     const history = [...recent]
       .reverse()
@@ -802,81 +1089,54 @@ export class SupportOrchestratorService {
       });
     }
 
-    let status = conversation.status;
-    let assignedAgentId = conversation.assignedAgentId;
-    let reference: string | null = null;
-    if (result.escalate) {
-      try {
-        const escalated = await this.escalation.escalate({
-          conversationId: conversation.id,
-          userId: conversation.userId,
-          category: category ?? conversation.category,
-          intent: context.currentIntent,
-          confidence: null,
-          reason: result.escalationReason ?? result.reason,
-          priority: Priority.Medium,
-          subject: content,
-          originalQuestion: content,
-          recentMessages: history.map((message) => ({
-            senderType: message.role,
-            content: message.content,
-          })),
-          knowledge: result.knowledgeRefs.map((item) => ({
-            id: item.id,
-            title: item.title,
-          })),
-        });
-        reference = escalated.ticketNumber;
-        assignedAgentId = escalated.assignedAgentId;
-        status = escalated.assignedAgentId
-          ? ConversationStatus.Human
-          : ConversationStatus.Waiting;
-      } catch (error) {
-        this.logger.error(
-          JSON.stringify({
-            event: 'support.llm.escalation_failed',
-            conversationId: conversation.id,
-            message: error instanceof Error ? error.message : 'unknown',
-          }),
-        );
-        status = ConversationStatus.Waiting;
-      }
-    }
+    const offeringEscalation =
+      result.context.pendingClarification?.kind === 'escalation_confirm' ||
+      result.responseType === OrchestratorResponseType.ClarificationRequired;
+
+    // LLM path never auto-opens a ticket. Offers wait for a yes; explicit
+    // human language is handled on the rules path via REQUEST_HUMAN.
+    // Stick only when recognition found an intent. Short “do it” follow-ups
+    // resolve via lastBotResponse in the action resolver, so empty recognition
+    // must clear sticky intent or off-topic turns keep reopening verification.
+    const nextIntent = recognizedIntent;
 
     return this.finish(conversation, {
       responseType: result.responseType,
       content: result.content,
-      reference,
+      reference: null,
       decision: {
-        kind: result.escalate
-          ? SupportDecisionKind.Escalate
+        kind: offeringEscalation
+          ? SupportDecisionKind.OfferEscalate
           : SupportDecisionKind.Answer,
         responseType: result.responseType,
         reason: result.reason,
-        intent: context.currentIntent,
+        intent: nextIntent,
         category: category ?? conversation.category,
         confidence: result.knowledgeRefs[0]?.score ?? 0.9,
         knowledge: null,
-        clarificationOptions: [],
+        clarificationOptions:
+          result.context.pendingClarification?.options ?? [],
         escalationReason: result.escalationReason,
         priority: Priority.Medium,
         appendDisclaimer: false,
         empathetic: false,
         repeatedQuestion: false,
-        countsAsUnresolved: result.escalate,
+        countsAsUnresolved: offeringEscalation,
       },
       recognition: null,
       context: {
         ...result.context,
+        currentIntent: nextIntent,
+        previousIntent: context.currentIntent,
         lastUserMessage: content,
         lastUserMessageNormalized: normalizeText(content),
         lastBotResponse: result.content,
         version: 1,
       },
-      status,
+      status: conversation.status,
       category: category ?? conversation.category,
       priority: conversation.priority,
-      assignedAgentId,
+      assignedAgentId: conversation.assignedAgentId,
       started: Date.now() - result.latencyMs,
       userText: content,
       safetyRedact: false,
@@ -1068,17 +1328,29 @@ export class SupportOrchestratorService {
     if (decision.kind === SupportDecisionKind.Answer) {
       conversationState = 'answered';
       unsuccessfulAttempts = 0;
-      pendingClarification = {
-        kind: 'follow_up',
-        question: 'Anything else?',
-        options: [
-          {
-            intent: decision.intent ?? state.currentIntent ?? 'GENERAL_ENQUIRY',
-            label: 'yes',
-          },
-          { intent: 'REQUEST_HUMAN', label: 'no I need more help' },
-        ],
-      };
+      const offer = pendingFromBotOffer({
+        botContent: response,
+        currentIntent: decision.intent ?? state.currentIntent,
+      });
+      pendingClarification = offer
+        ? {
+            kind: 'action_offer',
+            question: offer.question,
+            options: offer.options,
+            actionName: offer.actionName,
+          }
+        : {
+            kind: 'follow_up',
+            question: 'Anything else?',
+            options: [
+              {
+                intent:
+                  decision.intent ?? state.currentIntent ?? 'GENERAL_ENQUIRY',
+                label: 'yes',
+              },
+              { intent: 'REQUEST_HUMAN', label: 'no I need more help' },
+            ],
+          };
       if (decision.knowledge) {
         presented = [...presented, decision.knowledge.knowledgeId].slice(-10);
       }
@@ -1096,6 +1368,21 @@ export class SupportOrchestratorService {
             options: decision.clarificationOptions,
           }
         : null;
+    } else if (decision.kind === SupportDecisionKind.OfferEscalate) {
+      conversationState = 'clarifying';
+      pendingClarification = {
+        kind: 'escalation_confirm',
+        question: response,
+        options:
+          decision.clarificationOptions.length > 0
+            ? decision.clarificationOptions
+            : [
+                { intent: 'REQUEST_HUMAN', label: 'yes' },
+                { intent: 'GENERAL_ENQUIRY', label: 'no' },
+              ],
+        escalationReason: decision.escalationReason ?? decision.reason,
+        priority: decision.priority,
+      };
     } else if (decision.kind === SupportDecisionKind.Fallback) {
       conversationState = 'clarifying';
       unsuccessfulAttempts += 1;
@@ -1120,11 +1407,42 @@ export class SupportOrchestratorService {
       decision.kind === SupportDecisionKind.Emergency ||
       decision.kind === SupportDecisionKind.HumanHandling;
 
+    // Never keep a stale intent after handoff, close, greet, soft-ack, or
+    // when the decision explicitly cleared it — that caused verification loops.
+    const clearIntent =
+      decision.intent === null ||
+      decision.kind === SupportDecisionKind.Escalate ||
+      decision.kind === SupportDecisionKind.Emergency ||
+      decision.kind === SupportDecisionKind.Close ||
+      decision.kind === SupportDecisionKind.HumanHandling ||
+      decision.kind === SupportDecisionKind.Greet ||
+      decision.reason === 'soft_ack' ||
+      decision.reason === 'bot_identity' ||
+      decision.reason === 'follow_up_more_help' ||
+      decision.reason === 'follow_up_confirmed' ||
+      decision.reason === 'disallowed_topic' ||
+      decision.kind === SupportDecisionKind.UnsupportedAction;
+    if (
+      decision.kind === SupportDecisionKind.Answer &&
+      (decision.reason === 'soft_ack' ||
+        decision.reason === 'bot_identity' ||
+        decision.reason === 'follow_up_more_help')
+    ) {
+      pendingClarification = null;
+      conversationState = 'idle';
+    }
+    if (decision.kind === SupportDecisionKind.UnsupportedAction) {
+      pendingClarification = null;
+      conversationState = 'idle';
+    }
+
     return {
       ...emptyContext(),
       ...state,
       previousIntent: state.currentIntent,
-      currentIntent: decision.intent ?? state.currentIntent,
+      currentIntent: clearIntent
+        ? null
+        : (decision.intent ?? state.currentIntent),
       lastUserMessage: content,
       lastUserMessageNormalized: normalized,
       lastBotResponse: response || state.lastBotResponse,
@@ -1242,6 +1560,12 @@ export class SupportOrchestratorService {
       );
     }
 
+    const aiSource =
+      typeof input.extraMetadata?.source === 'string'
+        ? input.extraMetadata.source
+        : decision?.kind === SupportDecisionKind.RunAction
+          ? 'action'
+          : 'rules';
     this.logger.log(
       JSON.stringify({
         event: 'support.message.processed',
@@ -1251,6 +1575,9 @@ export class SupportOrchestratorService {
         category: input.category,
         latencyMs,
         silent: Boolean(input.suppressBotMessage),
+        aiActive: this.agent?.enabled() === true,
+        aiSource,
+        reason: decision?.reason ?? input.extraMetadata?.reason ?? null,
       }),
     );
 
@@ -1292,4 +1619,55 @@ export class SupportOrchestratorService {
       },
     };
   }
+}
+
+function readPriority(value: string | undefined, fallback: Priority): Priority {
+  if (
+    value === Priority.Low ||
+    value === Priority.Medium ||
+    value === Priority.High ||
+    value === Priority.Urgent
+  ) {
+    return value;
+  }
+  return fallback;
+}
+
+/** After top-up/payout start, collect reference or OTP as the next action. */
+function moneyActionFollowUp(
+  actionName: string,
+  result: ActionExecutionResult,
+): { actionName: string; params: Record<string, string> } | null {
+  if (result.status !== ActionStatus.Success) return null;
+  if (actionName === 'start_wallet_payout') {
+    const payoutId =
+      (typeof result.data?.payoutId === 'string' && result.data.payoutId) ||
+      result.resourceId;
+    if (!payoutId) return null;
+    return {
+      actionName: 'confirm_wallet_payout',
+      params: { payoutId },
+    };
+  }
+  if (actionName === 'start_wallet_topup') {
+    const reference =
+      (typeof result.data?.reference === 'string' && result.data.reference) ||
+      result.resourceId;
+    if (!reference) return null;
+    return {
+      actionName: 'verify_wallet_topup',
+      params: { reference },
+    };
+  }
+  if (actionName === 'resend_payout_otp') {
+    const payoutId =
+      (typeof result.data?.payoutId === 'string' && result.data.payoutId) ||
+      result.resourceId;
+    if (!payoutId) return null;
+    return {
+      actionName: 'confirm_wallet_payout',
+      params: { payoutId },
+    };
+  }
+  return null;
 }

@@ -9,6 +9,8 @@ export enum SupportDecisionKind {
   Clarify = 'clarify',
   Fallback = 'fallback',
   Escalate = 'escalate',
+  /** Ask before opening a specialist ticket; escalate only after the user says yes. */
+  OfferEscalate = 'offer_escalate',
   Emergency = 'emergency',
   Greet = 'greet',
   Close = 'close',

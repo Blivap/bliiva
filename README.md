@@ -45,18 +45,18 @@ Outbound action calls (Phase 3) use `BLIVAP_API_BASE_URL` + `BLIVAP_SERVICE_API_
 
 See [`.env.example`](.env.example). Important:
 
-| Variable | Purpose |
-| --- | --- |
-| `MONGODB_URI` | Support DB only — do not share Blivap app collections |
-| `REDIS_DB` / `BULLMQ_PREFIX` | Isolate from Blivap workers |
-| `SUPPORT_SERVICE_API_KEY` | Inbound service-to-service key |
-| `BLIVAP_API_BASE_URL` | Blivap backend for action reads |
-| `AUTO_HANDLE_MIN_CONFIDENCE` | Default `0.85`. Matching score, not a probability |
-| `CLARIFICATION_MIN_CONFIDENCE` | Default `0.6` |
-| `SUPPORT_USER_JWT_SECRET` | Optional HS256 secret. When set, identity comes from a verified Bearer token (`sub` or `userId`, `roles`) |
-| `INTENT_AMBIGUITY_MARGIN` | Default `0.08` |
-| `MAX_CLARIFICATION_ATTEMPTS` | Default `2` before escalation |
-| `INTELLIGENCE_CACHE_TTL_MS` | Default `15000` for published intents and knowledge |
+| Variable                       | Purpose                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`                  | Support DB only — do not share Blivap app collections                                                     |
+| `REDIS_DB` / `BULLMQ_PREFIX`   | Isolate from Blivap workers                                                                               |
+| `SUPPORT_SERVICE_API_KEY`      | Inbound service-to-service key                                                                            |
+| `BLIVAP_API_BASE_URL`          | Blivap backend for action reads                                                                           |
+| `AUTO_HANDLE_MIN_CONFIDENCE`   | Default `0.85`. Matching score, not a probability                                                         |
+| `CLARIFICATION_MIN_CONFIDENCE` | Default `0.6`                                                                                             |
+| `SUPPORT_USER_JWT_SECRET`      | Optional HS256 secret. When set, identity comes from a verified Bearer token (`sub` or `userId`, `roles`) |
+| `INTENT_AMBIGUITY_MARGIN`      | Default `0.08`                                                                                            |
+| `MAX_CLARIFICATION_ATTEMPTS`   | Default `2` before escalation                                                                             |
+| `INTELLIGENCE_CACHE_TTL_MS`    | Default `15000` for published intents and knowledge                                                       |
 
 ## Module layout
 
@@ -87,17 +87,18 @@ src/
     audit/
 ```
 
-Self-hosted model setup: [`docs/phase-3-llm.md`](docs/phase-3-llm.md).
+Self-hosted model setup: [`docs/phase-3-llm.md`](docs/phase-3-llm.md).  
+Product how-tos gathered from the Blivap web/mobile UI: [`docs/blivap-product-knowledge.md`](docs/blivap-product-knowledge.md).
 
 ## Phases
 
-| Phase | Status | Scope |
-| --- | --- | --- |
-| 1 Foundation | Done | Config, Mongo, Redis, schemas, Swagger, Blivap port |
-| 2 Intelligence | Done | Conversations, intents, knowledge, rules engine, decisions, escalation handoff |
-| 3 Account actions + self-hosted LLM | Done | Allowlisted Blivap tools, Ollama/Qwen3 agent, RAG, confirmation, ownership checks |
-| 4 Realtime | Planned | Socket.IO and live human takeover |
-| 5 Hardening | Planned | Broader load tests and production inference HA |
+| Phase                               | Status  | Scope                                                                             |
+| ----------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| 1 Foundation                        | Done    | Config, Mongo, Redis, schemas, Swagger, Blivap port                               |
+| 2 Intelligence                      | Done    | Conversations, intents, knowledge, rules engine, decisions, escalation handoff    |
+| 3 Account actions + self-hosted LLM | Done    | Allowlisted Blivap tools, Ollama/Qwen3 agent, RAG, confirmation, ownership checks |
+| 4 Realtime                          | Planned | Socket.IO and live human takeover                                                 |
+| 5 Hardening                         | Planned | Broader load tests and production inference HA                                    |
 
 ## Scripts
 
@@ -119,30 +120,31 @@ All `/support` routes require `x-support-api-key`. Identity is either:
 
 Do not expose header mode on the public internet. The service key is the trust boundary.
 
-| Method | Path | Who |
-| --- | --- | --- |
-| `POST` | `/api/v1/support/conversations` | User or guest |
-| `GET` | `/api/v1/support/conversations/:id` | Owner or staff |
-| `GET` | `/api/v1/support/conversations/:id/messages` | Owner or staff |
-| `POST` | `/api/v1/support/conversations/:id/messages` | Owner only. Runs the orchestrator |
-| `GET` | `/api/v1/support/categories` | Any authenticated caller |
-| `GET/POST/PATCH` | `/api/v1/support/admin/intents` | Administrator or supervisor |
-| `POST` | `/api/v1/support/admin/intents/test` | Administrator or supervisor |
-| `GET/POST/PATCH` | `/api/v1/support/admin/knowledge` | Administrator or supervisor |
-| `POST` | `/api/v1/support/admin/knowledge/:id/publish` | Administrator or supervisor |
-| `POST` | `/api/v1/support/admin/knowledge/test` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/intelligence/metrics` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/intelligence/failures` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/intelligence/unresolved` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/tickets` | Staff. Agents only see tickets assigned to them |
-| `GET` | `/api/v1/support/admin/actions` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/actions/history` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/actions/failures` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/llm/health` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/llm/config` | Administrator or supervisor |
-| `GET` | `/api/v1/support/admin/llm/analytics` | Administrator or supervisor |
-| `POST` | `/api/v1/support/admin/rag/reindex` | Administrator or supervisor |
-| `POST` | `/api/v1/support/admin/rag/test` | Administrator or supervisor |
+| Method           | Path                                            | Who                                             |
+| ---------------- | ----------------------------------------------- | ----------------------------------------------- |
+| `POST`           | `/api/v1/support/conversations`                 | User or guest                                   |
+| `GET`            | `/api/v1/support/conversations`                 | User or guest. Own conversations                |
+| `GET`            | `/api/v1/support/conversations/:id`             | Owner or staff                                  |
+| `GET`            | `/api/v1/support/conversations/:id/messages`    | Owner or staff                                  |
+| `POST`           | `/api/v1/support/conversations/:id/messages`    | Owner only. Runs the orchestrator               |
+| `GET`            | `/api/v1/support/categories`                    | Any authenticated caller                        |
+| `GET/POST/PATCH` | `/api/v1/support/admin/intents`                 | Administrator or supervisor                     |
+| `POST`           | `/api/v1/support/admin/intents/test`            | Administrator or supervisor                     |
+| `GET/POST/PATCH` | `/api/v1/support/admin/knowledge`               | Administrator or supervisor                     |
+| `POST`           | `/api/v1/support/admin/knowledge/:id/publish`   | Administrator or supervisor                     |
+| `POST`           | `/api/v1/support/admin/knowledge/test`          | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/intelligence/metrics`    | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/intelligence/failures`   | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/intelligence/unresolved` | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/tickets`                 | Staff. Agents only see tickets assigned to them |
+| `GET`            | `/api/v1/support/admin/actions`                 | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/actions/history`         | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/actions/failures`        | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/llm/health`              | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/llm/config`              | Administrator or supervisor                     |
+| `GET`            | `/api/v1/support/admin/llm/analytics`           | Administrator or supervisor                     |
+| `POST`           | `/api/v1/support/admin/rag/reindex`             | Administrator or supervisor                     |
+| `POST`           | `/api/v1/support/admin/rag/test`                | Administrator or supervisor                     |
 
 Account actions call Blivap with the signed-in user's JWT from `x-support-access-token` (or the verified Bearer token when that token is the Blivap JWT). Chat text never supplies the user id. See [`docs/phase-3-integration-map.md`](docs/phase-3-integration-map.md) and [`docs/phase-3-llm.md`](docs/phase-3-llm.md).
 

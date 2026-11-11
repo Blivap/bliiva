@@ -125,7 +125,19 @@ export class OllamaClient {
       if (isAbort(error)) {
         throw new LlmError('The model request timed out.', 'timeout');
       }
-      const message = error instanceof Error ? error.message : 'network error';
+      const cause =
+        error instanceof Error &&
+        'cause' in error &&
+        error.cause instanceof Error
+          ? error.cause.message
+          : null;
+      const message = [
+        error instanceof Error ? error.message : 'network error',
+        cause,
+        `baseUrl=${this.options.baseUrl}`,
+      ]
+        .filter(Boolean)
+        .join(' | ');
       throw new LlmError(message, 'runtime_unreachable', true);
     } finally {
       clearTimeout(timer);

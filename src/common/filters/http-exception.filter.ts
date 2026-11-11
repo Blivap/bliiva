@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -15,6 +15,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
 
     const status =
       exception instanceof HttpException
@@ -46,11 +47,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.message;
     }
 
+    const payload = {
+      event: 'http.exception',
+      method: request.method,
+      path: request.originalUrl || request.url,
+      statusCode: status,
+      message,
+      aiActive: process.env.LLM_ENABLED === 'true',
+    };
+
     if (status >= 500) {
       this.logger.error(
-        message,
+        JSON.stringify(payload),
         exception instanceof Error ? exception.stack : undefined,
       );
+    } else {
+      this.logger.warn(JSON.stringify(payload));
     }
 
     response.status(status).json({

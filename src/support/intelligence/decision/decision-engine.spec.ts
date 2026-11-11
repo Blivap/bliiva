@@ -75,10 +75,10 @@ describe('decision engine', () => {
     expect(decision.escalationReason).toBeNull();
   });
 
-  it('escalates after repeated failed clarification', () => {
+  it('offers escalation after repeated failed clarification', () => {
     const context = { ...emptyContext(), unsuccessfulAttempts: 2 };
     const decision = decide('what is the weather today', { context });
-    expect(decision.kind).toBe(SupportDecisionKind.Escalate);
+    expect(decision.kind).toBe(SupportDecisionKind.OfferEscalate);
     expect(decision.escalationReason).toBe('repeated_failure');
   });
 
@@ -88,16 +88,16 @@ describe('decision engine', () => {
     expect(decision.escalationReason).toBe('human_requested');
   });
 
-  it('escalates security incidents and does not treat confidence as permission', () => {
+  it('offers escalation for security incidents and does not treat confidence as permission', () => {
     const decision = decide('I think my account was hacked');
-    expect(decision.kind).toBe(SupportDecisionKind.Escalate);
+    expect(decision.kind).toBe(SupportDecisionKind.OfferEscalate);
     expect(decision.escalationReason).toBe('security_incident');
     expect(decision.priority).toBe('urgent');
   });
 
-  it('escalates a personal eligibility question instead of approving the donor', () => {
+  it('offers escalation for a personal eligibility question instead of approving the donor', () => {
     const decision = decide('Am I eligible to donate?');
-    expect(decision.kind).toBe(SupportDecisionKind.Escalate);
+    expect(decision.kind).toBe(SupportDecisionKind.OfferEscalate);
     expect(decision.escalationReason).toBe('personal_clinical_decision');
   });
 
@@ -108,9 +108,10 @@ describe('decision engine', () => {
     expect(decision.knowledge?.answer).toContain('cannot approve');
   });
 
-  it('sends emergencies to urgent escalation regardless of other matches', () => {
+  it('offers urgent specialist help for emergencies without auto-ticketing', () => {
     const decision = decide('I have chest pain and I cannot breathe');
-    expect(decision.kind).toBe(SupportDecisionKind.Emergency);
+    expect(decision.kind).toBe(SupportDecisionKind.OfferEscalate);
+    expect(decision.escalationReason).toBe('medical_emergency');
     expect(decision.priority).toBe('urgent');
   });
 
