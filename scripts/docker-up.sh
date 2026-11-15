@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring up the full local/test stack from this app folder.
+# Bring up the full local/test stack from this app folder, then verify LLM.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -27,12 +27,21 @@ docker compose \
 echo "Waiting for API health…"
 for _ in $(seq 1 90); do
   if curl -sf "http://127.0.0.1:3100/api/v1/health" >/dev/null 2>&1; then
-    echo "Ready: http://127.0.0.1:3100/api/v1  (Swagger: http://127.0.0.1:3100/docs)"
-    exit 0
+    break
   fi
   sleep 2
 done
 
-echo "API did not become healthy in time. Recent logs:"
-docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" logs --tail=80 api ollama ollama-warm
-exit 1
+if ! curl -sf "http://127.0.0.1:3100/api/v1/health" >/dev/null 2>&1; then
+  echo "API did not become healthy in time. Recent logs:"
+  docker compose --project-directory "$ROOT" -f "$ROOT/docker-compose.yml" logs --tail=80 api ollama ollama-warm
+  exit 1
+fi
+
+echo "Running Compose stack-check (API + LLM probe)…"
+docker compose \
+  --project-directory "$ROOT" \
+  -f "$ROOT/docker-compose.yml" \
+  run --rm --no-deps stack-check
+
+echo "Ready: http://127.0.0.1:3100/api/v1  (Swagger: http://127.0.0.1:3100/docs)"

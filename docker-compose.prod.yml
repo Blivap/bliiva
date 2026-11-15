@@ -1,14 +1,18 @@
 # Live / production API only.
 # MongoDB and Redis come from connection strings in .env — not Compose services.
+# LLM runs on a private inference host (LLM_BASE_URL). stack-check verifies it.
 #
 # Required in .env:
 #   MONGODB_URI=mongodb+srv://...   (or mongodb://user:pass@host:27017/bliiva_support)
 #   REDIS_URL=rediss://...          (or redis://host:6379/1)
 #   SUPPORT_SERVICE_API_KEY=...
 #   BLIIVA_IMAGE=ghcr.io/...
+#   LLM_ENABLED=true
+#   LLM_BASE_URL=http://bliiva-llm.internal:11434
 #
 # Usage:
-#   docker compose -f docker-compose.prod.yml up -d
+#   yarn docker:live
+#   # or: docker compose -f docker-compose.prod.yml up -d && docker compose -f docker-compose.prod.yml run --rm stack-check
 
 name: bliiva-live
 
@@ -24,6 +28,7 @@ services:
       - .env
     environment:
       NODE_ENV: production
+      PORT: ${PORT:-2002}
       # Live data stores — only from env connection strings (never Compose mongo/redis).
       MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI to the live MongoDB connection string}
       REDIS_URL: ${REDIS_URL:?Set REDIS_URL to the live Redis connection string}
@@ -31,6 +36,10 @@ services:
       REDIS_HOST: ''
       REDIS_PORT: ''
       REDIS_PASSWORD: ''
+      # Live must use the private Ollama host — fail stack-check if unset/disabled.
+      LLM_ENABLED: ${LLM_ENABLED:-true}
+      LLM_BASE_URL: ${LLM_BASE_URL:?Set LLM_BASE_URL to the private Ollama URL}
+      LLM_MODEL: ${LLM_MODEL:-qwen3:4b}
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -50,3 +59,18 @@ services:
       options:
         max-size: '10m'
         max-file: '5'
+
+  # After API is healthy: require LLM boot probe (chat) to succeed before deploy is OK.
+  stack-check:
+    image: curlimages/curl:8.12.1
+    restart: 'no'
+    volumes:
+      - ./scripts/stack-check.sh:/stack-check.sh:ro
+    environment:
+      HEALTH_BASE: http://api:${PORT:-2002}/api/v1
+      HEALTH_RETRIES: '40'
+      LLM_RETRIES: '90'
+    entrypoint: ['/bin/sh', '/stack-check.sh']
+    depends_on:
+      api:
+        condition: service_healthy

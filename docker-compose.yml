@@ -135,6 +135,22 @@ services:
       retries: 20
       start_period: 40s
 
+  # After API is up: require Mongo/Redis healthy AND LLM probe chat OK.
+  # `yarn docker:up` / compose update waits on this oneshot.
+  stack-check:
+    image: curlimages/curl:8.12.1
+    restart: 'no'
+    volumes:
+      - ./scripts/stack-check.sh:/stack-check.sh:ro
+    environment:
+      HEALTH_BASE: http://api:3000/api/v1
+      HEALTH_RETRIES: '30'
+      LLM_RETRIES: '90'
+    entrypoint: ['/bin/sh', '/stack-check.sh']
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   bliiva_mongo_data:
   bliiva_redis_data:

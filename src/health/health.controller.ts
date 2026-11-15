@@ -4,6 +4,7 @@ import { InjectConnection } from '@nestjs/mongoose';
 import type { Response } from 'express';
 import { okResponse } from '../common/interfaces/api-response.interface.js';
 import { RedisService } from '../redis/redis.service.js';
+import { LlmStartupProbeService } from '../support/llm/llm-startup-probe.service.js';
 
 /** Avoid importing mongoose.Connection — it is not an ESM named export. */
 interface MongoConnectionStatus {
@@ -16,6 +17,7 @@ export class HealthController {
   constructor(
     @InjectConnection() private readonly mongo: MongoConnectionStatus,
     private readonly redis: RedisService,
+    private readonly llmProbe: LlmStartupProbeService,
   ) {}
 
   @Get()
@@ -45,6 +47,30 @@ export class HealthController {
         mongo: mongoOk ? 'up' : 'down',
         redis: redisOk ? 'up' : 'down',
         ...(redisError ? { redisError } : {}),
+      },
+    );
+  }
+
+  @Get('llm')
+  @ApiOperation({
+    summary: 'LLM readiness for deploy / Compose stack-check',
+    description:
+      'Returns 200 only when LLM_ENABLED=true and the boot probe chat succeeded. Used by docker compose stack-check on local and live updates.',
+  })
+  async llm(@Res({ passthrough: true }) response: Response) {
+    const status = await this.llmProbe.readiness();
+    response.status(status.ok ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE);
+    return okResponse(
+      status.ok ? 'LLM ready' : 'LLM not ready',
+      {
+        status: status.ok ? 'ok' : 'degraded',
+        utilized: status.utilized,
+        reason: status.reason,
+        provider: status.provider,
+        model: status.model,
+        baseUrl: status.baseUrl,
+        checkedAt: status.checkedAt,
+        message: status.message,
       },
     );
   }
