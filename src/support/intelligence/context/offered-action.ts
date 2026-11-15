@@ -77,7 +77,8 @@ const TOPIC_TO_ACTION: Array<{
     action: 'get_blood_requests',
   },
   {
-    pattern: /\b(notification settings|alert (?:prefs|preferences)|push (?:on|off))\b/,
+    pattern:
+      /\b(notification settings|alert (?:prefs|preferences)|push (?:on|off))\b/,
     action: 'get_notification_settings',
   },
   {
@@ -85,7 +86,8 @@ const TOPIC_TO_ACTION: Array<{
     action: 'list_notifications',
   },
   {
-    pattern: /\b(list|show|find|browse|available)\b.{0,30}\bdonors?\b|\bdonors?\b.{0,20}\b(list|near me|available)\b|\b[abo]b?\s*[+-]\s*donors?\b/,
+    pattern:
+      /\b(list|show|find|browse|available)\b.{0,30}\bdonors?\b|\bdonors?\b.{0,20}\b(list|near me|available)\b|\b[abo]b?\s*[+-]\s*donors?\b/,
     action: 'list_donors',
   },
   {
@@ -174,7 +176,10 @@ const INTENT_TO_ACTION: Record<
   string,
   { action: string; params?: Record<string, string> }
 > = {
-  WALLET_BALANCE: { action: 'get_wallet_summary', params: { focus: 'balance' } },
+  WALLET_BALANCE: {
+    action: 'get_wallet_summary',
+    params: { focus: 'balance' },
+  },
   WALLET_TRANSACTIONS: {
     action: 'get_wallet_summary',
     params: { focus: 'transactions' },
@@ -193,7 +198,9 @@ const INTENT_TO_ACTION: Record<
   IDENTITY_VERIFICATION: { action: 'get_identity_verification_status' },
 };
 
-export function botOfferedAction(lastBotResponse: string | null | undefined): boolean {
+export function botOfferedAction(
+  lastBotResponse: string | null | undefined,
+): boolean {
   if (!lastBotResponse) return false;
   return OFFER_CUE.test(normalizeText(lastBotResponse));
 }
@@ -319,7 +326,10 @@ function extractBloodType(text: string): string | null {
 }
 
 /** User is accepting an offered task (yes / do it / show me / go ahead). */
-export function isGoAhead(utterance: UtteranceSignals, normalized: string): boolean {
+export function isGoAhead(
+  utterance: UtteranceSignals,
+  normalized: string,
+): boolean {
   if (utterance.affirmation || utterance.actionGoAhead) return true;
   // Soft ack alone is not enough (“alright” after “Anything else?” means done).
   // Explicit show/check language is a go-ahead even without “yes”.

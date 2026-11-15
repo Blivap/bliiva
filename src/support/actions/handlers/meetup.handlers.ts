@@ -18,7 +18,9 @@ export class GetMeetupSessionHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const sessionId = request.params.sessionId;
     if (!sessionId) {
       return {
@@ -49,7 +51,9 @@ export class CreateMeetupSessionHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const bookingId = request.params.bookingId ?? request.params.donationId;
     if (!bookingId) {
       return {
@@ -80,7 +84,9 @@ export class VerifyMeetupCodeHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const sessionId = request.params.sessionId;
     const code = request.params.code;
     if (!sessionId || !code) {
@@ -113,7 +119,9 @@ export class ConfirmMeetupRequesterHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const sessionId = request.params.sessionId;
     if (!sessionId) {
       return {
@@ -144,7 +152,9 @@ export class ConfirmMeetupDonorHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const sessionId = request.params.sessionId;
     if (!sessionId) {
       return {
@@ -175,7 +185,9 @@ export class CompleteMeetupHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const sessionId = request.params.sessionId;
     if (!sessionId) {
       return {
@@ -206,7 +218,9 @@ export class TerminateMeetupHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const sessionId = request.params.sessionId;
     if (!sessionId) {
       return {
@@ -238,7 +252,9 @@ export class ReportMeetupHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const sessionId = request.params.sessionId;
     const reason = request.params.reason;
     if (!sessionId || !reason) {

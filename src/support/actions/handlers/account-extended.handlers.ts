@@ -17,7 +17,9 @@ export class UpdateProfileHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const patch: Record<string, unknown> = {};
     for (const key of [
       'firstname',
@@ -32,7 +34,8 @@ export class UpdateProfileHandler implements ActionHandler {
       return {
         status: ActionStatus.NeedsParameter,
         actionName: this.name,
-        message: 'What should I update (firstname, lastname, phonenumber, dateOfBirth)?',
+        message:
+          'What should I update (firstname, lastname, phonenumber, dateOfBirth)?',
         failureCode: 'missing_profile_fields',
       };
     }
@@ -43,7 +46,8 @@ export class UpdateProfileHandler implements ActionHandler {
     return {
       status: ActionStatus.Success,
       actionName: this.name,
-      message: `Profile updated for ${profile.firstname ?? ''} ${profile.lastname ?? ''}`.trim(),
+      message:
+        `Profile updated for ${profile.firstname ?? ''} ${profile.lastname ?? ''}`.trim(),
       data: { userId: profile.id },
       resourceType: 'profile',
       resourceId: profile.id,
@@ -57,7 +61,9 @@ export class ChangePasswordHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const oldPassword = request.params.oldPassword;
     const password = request.params.password ?? request.params.newPassword;
     if (!oldPassword || !password) {
@@ -88,7 +94,9 @@ export class RequestPasswordResetHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const ctx = requireBlivapContext(request.actor);
     const profile = await this.blivap.getProfile(ctx);
     await this.blivap.requestPasswordReset(profile.email);
@@ -108,7 +116,9 @@ export class SubmitNinVerificationHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const nin = request.params.nin;
     if (!nin || !/^\d{11}$/.test(nin)) {
       return {
@@ -138,7 +148,9 @@ export class RegisterDonorHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const bloodType = request.params.bloodType;
     const city = request.params.city;
     const state = request.params.state;
@@ -146,7 +158,8 @@ export class RegisterDonorHandler implements ActionHandler {
       return {
         status: ActionStatus.NeedsParameter,
         actionName: this.name,
-        message: 'I need bloodType, city, and state to register you as a donor.',
+        message:
+          'I need bloodType, city, and state to register you as a donor.',
         failureCode: 'missing_donor_fields',
       };
     }
@@ -161,7 +174,8 @@ export class RegisterDonorHandler implements ActionHandler {
     return {
       status: ActionStatus.Success,
       actionName: this.name,
-      message: 'Donor registration submitted. Complete any remaining screening in the app.',
+      message:
+        'Donor registration submitted. Complete any remaining screening in the app.',
       data: { keys: Object.keys(result) },
       resourceType: 'donor',
     };
@@ -174,7 +188,9 @@ export class UpdateDonorLocationHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const lng = Number(request.params.lng ?? request.params.longitude);
     const lat = Number(request.params.lat ?? request.params.latitude);
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
@@ -204,13 +220,16 @@ export class UpdateMeetupCareHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const expenseCoverage = request.params.expenseCoverage;
     if (expenseCoverage !== 'requested' && expenseCoverage !== 'self') {
       return {
         status: ActionStatus.NeedsParameter,
         actionName: this.name,
-        message: 'Choose meetup care: “self” (you cover) or “requested” (requester covers).',
+        message:
+          'Choose meetup care: “self” (you cover) or “requested” (requester covers).',
         failureCode: 'missing_meetup_care',
       };
     }
@@ -233,7 +252,9 @@ export class MarkNotificationReadHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const notificationId = request.params.notificationId;
     if (!notificationId) {
       return {
@@ -264,7 +285,9 @@ export class MarkAllNotificationsReadHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     await this.blivap.markAllNotificationsRead(
       requireBlivapContext(request.actor),
     );
@@ -284,8 +307,12 @@ export class ListHospitalsHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
-    const rows = await this.blivap.listHospitals(requireBlivapContext(request.actor));
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
+    const rows = await this.blivap.listHospitals(
+      requireBlivapContext(request.actor),
+    );
     return {
       status: ActionStatus.Success,
       actionName: this.name,
@@ -315,7 +342,9 @@ export class ListWelfarePackagesHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const rows = await this.blivap.listWelfarePackages(
       requireBlivapContext(request.actor),
     );
@@ -325,7 +354,10 @@ export class ListWelfarePackagesHandler implements ActionHandler {
       message: rows.length
         ? rows
             .slice(0, 10)
-            .map((row, i) => `${i + 1}. ${row.name}${row.description ? ` — ${row.description}` : ''}`)
+            .map(
+              (row, i) =>
+                `${i + 1}. ${row.name}${row.description ? ` — ${row.description}` : ''}`,
+            )
             .join('\n')
         : 'No welfare packages listed.',
       data: { count: rows.length },

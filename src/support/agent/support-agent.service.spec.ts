@@ -140,7 +140,9 @@ describe('SupportAgentService', () => {
       OrchestratorResponseType.ClarificationRequired,
     );
     expect(result.content.toLowerCase()).toContain('specialist');
-    expect(result.context.pendingClarification?.kind).toBe('escalation_confirm');
+    expect(result.context.pendingClarification?.kind).toBe(
+      'escalation_confirm',
+    );
   });
 
   it('keeps idle acks conversational without tools or leaked reasoning', async () => {
@@ -172,9 +174,12 @@ describe('SupportAgentService', () => {
       history: [],
     });
     expect(retrieve).not.toHaveBeenCalled();
-    const messages = chat.mock.calls[0]?.[0]?.messages ?? [];
+    const chatCalls = chat.mock.calls as unknown as Array<
+      [{ messages?: Array<{ content?: string }> }]
+    >;
+    const messages = chatCalls[0]?.[0]?.messages ?? [];
     expect(
-      messages.some((message: { content?: string }) =>
+      messages.some((message) =>
         String(message.content ?? '').includes('Authorized backend tools'),
       ),
     ).toBe(false);
@@ -258,8 +263,8 @@ describe('SupportAgentService', () => {
   it('never ships long planning text as the chat reply', async () => {
     const leak = [
       'Okay, let\'s start by understanding what the customer is asking for. They said, "anything at all just come up with something."',
-      'I\'ll generate a simple, warm reply. The final reply will be a short message.',
-      'Alright, let\'s start by understanding what the customer is asking for.',
+      "I'll generate a simple, warm reply. The final reply will be a short message.",
+      "Alright, let's start by understanding what the customer is asking for.",
     ].join('\n\n');
     const agent = harness({
       retrieve: vi.fn(async () => ({
@@ -372,9 +377,10 @@ describe('SupportAgentService', () => {
     });
     expect(result.outcome).toBe('answered');
     expect(result.knowledgeRefs[0]?.id).toBe('kb-donor-reg');
-    const systemNotes = String(
-      chat.mock.calls[0]?.[0]?.messages?.[2]?.content ?? '',
-    );
+    const chatCalls = chat.mock.calls as unknown as Array<
+      [{ messages?: Array<{ content?: string }> }]
+    >;
+    const systemNotes = String(chatCalls[0]?.[0]?.messages?.[2]?.content ?? '');
     expect(systemNotes).toContain('donor form');
   });
 

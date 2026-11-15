@@ -242,8 +242,7 @@ export class SupportAgentService {
                   question: 'Anything else?',
                   options: [
                     {
-                      intent:
-                        nextContext.currentIntent ?? 'GENERAL_ENQUIRY',
+                      intent: nextContext.currentIntent ?? 'GENERAL_ENQUIRY',
                       label: 'yes',
                     },
                     {
@@ -351,8 +350,7 @@ export class SupportAgentService {
                     question: 'Anything else?',
                     options: [
                       {
-                        intent:
-                          nextContext.currentIntent ?? 'GENERAL_ENQUIRY',
+                        intent: nextContext.currentIntent ?? 'GENERAL_ENQUIRY',
                         label: 'yes',
                       },
                       {
@@ -361,7 +359,8 @@ export class SupportAgentService {
                       },
                     ],
                   },
-            pendingActionName: offer?.actionName ?? nextContext.pendingActionName,
+            pendingActionName:
+              offer?.actionName ?? nextContext.pendingActionName,
           };
 
           return {

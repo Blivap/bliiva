@@ -311,9 +311,7 @@ export interface BlivapIntegrationPort {
   markAllNotificationsRead(ctx: BlivapCallContext): Promise<void>;
 
   listHospitals(ctx: BlivapCallContext): Promise<BlivapHospitalSummary[]>;
-  listWelfarePackages(
-    ctx: BlivapCallContext,
-  ): Promise<BlivapWelfarePackage[]>;
+  listWelfarePackages(ctx: BlivapCallContext): Promise<BlivapWelfarePackage[]>;
   getMeetupSession(
     ctx: BlivapCallContext,
     sessionId: string,

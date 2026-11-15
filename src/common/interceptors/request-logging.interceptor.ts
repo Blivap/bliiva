@@ -43,7 +43,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         contentLength: headerValue(request.headers['content-length']) || null,
         hasAuth: Boolean(
           headerValue(request.headers.authorization) ||
-            headerValue(request.headers['x-support-api-key']),
+          headerValue(request.headers['x-support-api-key']),
         ),
         aiActive,
         aiModel: aiActive ? aiModel : null,

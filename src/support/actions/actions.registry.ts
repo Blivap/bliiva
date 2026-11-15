@@ -267,7 +267,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'list_banks',
-    description: 'Call when the user asks which banks Blivap supports for payouts',
+    description:
+      'Call when the user asks which banks Blivap supports for payouts',
     category: 'wallet_transactions',
     intents: ['BANK_ACCOUNT_HELP', 'WALLET_WITHDRAW_HELP'],
     requiresAuthentication: true,
@@ -295,7 +296,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'list_payouts',
-    description: 'Call when the user asks about withdrawal history or payout status list',
+    description:
+      'Call when the user asks about withdrawal history or payout status list',
     category: 'wallet_transactions',
     intents: ['WALLET_TRANSACTIONS', 'WALLET_WITHDRAW_HELP'],
     requiresAuthentication: true,
@@ -365,7 +367,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'list_hospitals',
-    description: 'Call when the user asks for hospitals or facilities in Blivap',
+    description:
+      'Call when the user asks for hospitals or facilities in Blivap',
     category: 'hospital_verification',
     intents: ['HOSPITAL_VERIFICATION', 'BOOKING_HELP'],
     requiresAuthentication: true,
@@ -436,7 +439,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'update_profile',
-    description: 'Call when the user wants to update name, phone, or DOB (confirm first)',
+    description:
+      'Call when the user wants to update name, phone, or DOB (confirm first)',
     category: 'user_profile',
     intents: ['PROFILE_UPDATE'],
     requiresAuthentication: true,
@@ -450,7 +454,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'register_donor',
-    description: 'Call when the user wants to register as a donor (confirm first)',
+    description:
+      'Call when the user wants to register as a donor (confirm first)',
     category: 'donor_registration',
     intents: ['DONOR_REGISTRATION'],
     requiresAuthentication: true,
@@ -483,7 +488,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'update_donor_location',
-    description: 'Call when the user wants to update donor location (confirm first)',
+    description:
+      'Call when the user wants to update donor location (confirm first)',
     category: 'donor_registration',
     intents: ['DONOR_REGISTRATION'],
     requiresAuthentication: true,
@@ -510,7 +516,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'update_meetup_care',
-    description: 'Call when the user wants to set meetup care coverage (confirm first)',
+    description:
+      'Call when the user wants to set meetup care coverage (confirm first)',
     category: 'donor_registration',
     intents: ['MEETUP_HELP', 'DONOR_REGISTRATION'],
     requiresAuthentication: true,
@@ -531,7 +538,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'create_blood_request',
-    description: 'Call when the user wants to create a blood request (confirm first)',
+    description:
+      'Call when the user wants to create a blood request (confirm first)',
     category: 'blood_requests',
     intents: ['BLOOD_REQUEST_HELP'],
     requiresAuthentication: true,
@@ -564,7 +572,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'request_booking',
-    description: 'Call when the user wants to request a booking (confirm first)',
+    description:
+      'Call when the user wants to request a booking (confirm first)',
     category: 'blood_donation_process',
     intents: ['BOOKING_HELP', 'APPOINTMENT_STATUS'],
     requiresAuthentication: true,
@@ -618,7 +627,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'decline_booking',
-    description: 'Call when the user wants to decline a booking (confirm first)',
+    description:
+      'Call when the user wants to decline a booking (confirm first)',
     category: 'blood_donation_process',
     intents: ['BOOKING_HELP', 'DONATION_STATUS'],
     requiresAuthentication: true,
@@ -639,7 +649,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'report_booking',
-    description: 'Call when the user wants to report a booking issue (confirm first)',
+    description:
+      'Call when the user wants to report a booking issue (confirm first)',
     category: 'blood_donation_process',
     intents: ['BOOKING_HELP', 'TECHNICAL_PROBLEM'],
     requiresAuthentication: true,
@@ -666,7 +677,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'create_meetup_session',
-    description: 'Call when the user wants to start a meetup for a booking (confirm first)',
+    description:
+      'Call when the user wants to start a meetup for a booking (confirm first)',
     category: 'blood_donation_process',
     intents: ['MEETUP_HELP'],
     requiresAuthentication: true,
@@ -687,7 +699,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'verify_meetup_code',
-    description: 'Call when the user pastes a meetup verification code (confirm first)',
+    description:
+      'Call when the user pastes a meetup verification code (confirm first)',
     category: 'blood_donation_process',
     intents: ['MEETUP_HELP'],
     requiresAuthentication: true,
@@ -714,7 +727,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'confirm_meetup_requester',
-    description: 'Call when the requester confirms meetup donation (confirm first)',
+    description:
+      'Call when the requester confirms meetup donation (confirm first)',
     category: 'blood_donation_process',
     intents: ['MEETUP_HELP'],
     requiresAuthentication: true,
@@ -756,7 +770,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'complete_meetup',
-    description: 'Call when the user wants to complete a meetup (confirm first)',
+    description:
+      'Call when the user wants to complete a meetup (confirm first)',
     category: 'blood_donation_process',
     intents: ['MEETUP_HELP'],
     requiresAuthentication: true,
@@ -777,7 +792,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'terminate_meetup',
-    description: 'Call when the user wants to terminate a meetup (confirm first)',
+    description:
+      'Call when the user wants to terminate a meetup (confirm first)',
     category: 'blood_donation_process',
     intents: ['MEETUP_HELP'],
     requiresAuthentication: true,
@@ -825,7 +841,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'add_bank_account',
-    description: 'Call when the user wants to save a bank account (confirm first)',
+    description:
+      'Call when the user wants to save a bank account (confirm first)',
     category: 'wallet_transactions',
     intents: ['BANK_ACCOUNT_HELP'],
     requiresAuthentication: true,
@@ -846,7 +863,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'set_primary_bank_account',
-    description: 'Call when the user wants to set primary bank account (confirm first)',
+    description:
+      'Call when the user wants to set primary bank account (confirm first)',
     category: 'wallet_transactions',
     intents: ['BANK_ACCOUNT_HELP'],
     requiresAuthentication: true,
@@ -867,7 +885,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'remove_bank_account',
-    description: 'Call when the user wants to remove a bank account (confirm first)',
+    description:
+      'Call when the user wants to remove a bank account (confirm first)',
     category: 'wallet_transactions',
     intents: ['BANK_ACCOUNT_HELP'],
     requiresAuthentication: true,
@@ -888,7 +907,8 @@ const DEFINITIONS: SupportActionDefinition[] = [
   },
   {
     name: 'submit_nin_verification',
-    description: 'Call when the user wants to submit NIN for verification (confirm first)',
+    description:
+      'Call when the user wants to submit NIN for verification (confirm first)',
     category: 'hospital_verification',
     intents: ['IDENTITY_VERIFICATION', 'HOSPITAL_VERIFICATION'],
     requiresAuthentication: true,

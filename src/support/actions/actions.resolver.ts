@@ -115,8 +115,9 @@ export class ActionsResolver {
       if (/\bverify (?:my )?(?:top ?up|payment|paystack)\b/.test(normalized)) {
         const action = this.registry.get('verify_wallet_topup');
         if (action?.enabled) {
-          const reference =
-            input.message.match(/\b([A-Za-z0-9_-]{8,64})\b/)?.[1];
+          const reference = input.message.match(
+            /\b([A-Za-z0-9_-]{8,64})\b/,
+          )?.[1];
           return {
             action,
             params: {
@@ -147,9 +148,7 @@ export class ActionsResolver {
         );
         const fromMatch = bloodMatch
           ? `${bloodMatch[1]!.toUpperCase()}${
-              /plus|positive|\+/.test(bloodMatch[2]!.toLowerCase())
-                ? '+'
-                : '-'
+              /plus|positive|\+/.test(bloodMatch[2]!.toLowerCase()) ? '+' : '-'
             }`
           : undefined;
         const bloodType = input.params?.bloodType || fromMatch;
@@ -252,7 +251,10 @@ export class ActionsResolver {
         const action = this.registry.get('add_bank_account');
         return action?.enabled ? { action, params: { ...input.params } } : null;
       }
-      if (/\b(supported )?banks?\b/.test(normalized) && !/\baccount\b/.test(normalized)) {
+      if (
+        /\b(supported )?banks?\b/.test(normalized) &&
+        !/\baccount\b/.test(normalized)
+      ) {
         const action = this.registry.get('list_banks');
         return action?.enabled ? { action, params: { ...input.params } } : null;
       }
@@ -270,7 +272,10 @@ export class ActionsResolver {
       ) {
         return null;
       }
-      if (/\b(create|new|make)\b/.test(normalized) && !WALLET_MUTATION_HOWTO.test(normalized)) {
+      if (
+        /\b(create|new|make)\b/.test(normalized) &&
+        !WALLET_MUTATION_HOWTO.test(normalized)
+      ) {
         const action = this.registry.get('create_blood_request');
         return action?.enabled ? { action, params: { ...input.params } } : null;
       }
@@ -285,7 +290,10 @@ export class ActionsResolver {
       input.intent === 'APPOINTMENT_STATUS' ||
       input.intent === 'BOOKING_HELP'
     ) {
-      if (input.intent === 'BOOKING_HELP' && WALLET_MUTATION_HOWTO.test(normalized)) {
+      if (
+        input.intent === 'BOOKING_HELP' &&
+        WALLET_MUTATION_HOWTO.test(normalized)
+      ) {
         return null;
       }
       if (/\baccept\b/.test(normalized)) {
@@ -307,7 +315,10 @@ export class ActionsResolver {
     }
 
     if (input.intent === 'MEETUP_HELP') {
-      if (WALLET_MUTATION_HOWTO.test(normalized) && !/\b(my|status|session)\b/.test(normalized)) {
+      if (
+        WALLET_MUTATION_HOWTO.test(normalized) &&
+        !/\b(my|status|session)\b/.test(normalized)
+      ) {
         return null;
       }
       if (/\bwelfare packages?\b/.test(normalized)) {
@@ -419,9 +430,7 @@ export class ActionsResolver {
           return null;
         }
         const action = this.registry.get('get_account_status');
-        return action?.enabled
-          ? { action, params: { ...input.params } }
-          : null;
+        return action?.enabled ? { action, params: { ...input.params } } : null;
       }
       const identity = this.registry.get('get_identity_verification_status');
       return identity?.enabled

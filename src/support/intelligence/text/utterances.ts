@@ -30,8 +30,7 @@ const PRESENCE_CHECK =
 const BRAND_PING = /^(bliiva|blivap)$/;
 const CLOSING =
   /^(thanks|thank you|thank you very much|that is all|thats all|bye|goodbye|ok thanks|okay thanks|nothing|nothing more|nothing else|that will be all)$/;
-const AFFIRMATION =
-  /^(yes|yeah|yep|yup|correct|exactly|right)(?:\s+please)?$/;
+const AFFIRMATION = /^(yes|yeah|yep|yup|correct|exactly|right)(?:\s+please)?$/;
 const SOFT_ACK =
   /^(ok|okay|alright|all right|sure|got it|cool|great|sounds good|fine|perfect)(?:\s+please)?$/;
 /** Imperative “do the thing” after the bot offered help or an action. */

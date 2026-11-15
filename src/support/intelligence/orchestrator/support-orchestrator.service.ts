@@ -356,7 +356,11 @@ export class SupportOrchestratorService {
         resolvedActionName = offered.actionName;
         actionParams = { ...actionParams, ...offered.params };
       }
-    } else if (!pendingRejectConfirm && !pendingEscalateAffirm && !pendingEscalateReject) {
+    } else if (
+      !pendingRejectConfirm &&
+      !pendingEscalateAffirm &&
+      !pendingEscalateReject
+    ) {
       const resolved = this.actionResolver.resolve({
         intent: recognition.intent ?? context.currentIntent,
         message: focusText,
@@ -447,9 +451,7 @@ export class SupportOrchestratorService {
         content,
         actor,
         // Don't ground the LLM on a stale intent when this turn didn't match one.
-        recognition.intent
-          ? context
-          : { ...context, currentIntent: null },
+        recognition.intent ? context : { ...context, currentIntent: null },
         recognition.category,
         recognition.intent,
       );
@@ -461,11 +463,9 @@ export class SupportOrchestratorService {
           kind: SupportDecisionKind.Escalate,
           responseType: OrchestratorResponseType.Escalated,
           reason:
-            context.pendingClarification?.escalationReason ??
-            'human_requested',
+            context.pendingClarification?.escalationReason ?? 'human_requested',
           escalationReason:
-            context.pendingClarification?.escalationReason ??
-            'human_requested',
+            context.pendingClarification?.escalationReason ?? 'human_requested',
           priority: readPriority(
             context.pendingClarification?.priority,
             Priority.Medium,
@@ -534,23 +534,23 @@ export class SupportOrchestratorService {
                     actionName: null,
                     intent: null,
                   }
-              : pending.type === 'reject' &&
-                  context.pendingClarification?.kind !== 'action_confirm' &&
-                  context.pendingClarification?.kind !== 'escalation_confirm'
-                ? {
-                    ...baseDecision,
-                    kind: SupportDecisionKind.Clarify,
-                    responseType:
-                      OrchestratorResponseType.ClarificationRequired,
-                    reason: 'clarification_rejected',
-                    knowledge: null,
-                    clarificationOptions: [],
-                    escalationReason: null,
-                    countsAsUnresolved: true,
-                    appendDisclaimer: false,
-                    actionName: null,
-                  }
-                : baseDecision;
+                : pending.type === 'reject' &&
+                    context.pendingClarification?.kind !== 'action_confirm' &&
+                    context.pendingClarification?.kind !== 'escalation_confirm'
+                  ? {
+                      ...baseDecision,
+                      kind: SupportDecisionKind.Clarify,
+                      responseType:
+                        OrchestratorResponseType.ClarificationRequired,
+                      reason: 'clarification_rejected',
+                      knowledge: null,
+                      clarificationOptions: [],
+                      escalationReason: null,
+                      countsAsUnresolved: true,
+                      appendDisclaimer: false,
+                      actionName: null,
+                    }
+                  : baseDecision;
 
     let reference: string | null = null;
     let ticketQueued = false;
@@ -598,7 +598,7 @@ export class SupportOrchestratorService {
               : decision.reason === 'bot_identity'
                 ? "I'm Bliiva — Blivap’s official AI support assistant. I can help with your Blivap account, donations, bookings, wallet, notifications, and more."
                 : decision.reason === 'small_talk_off_topic'
-                  ? "I’m here for Blivap support — accounts, donations, bookings, and wallet. What do you need help with?"
+                  ? 'I’m here for Blivap support — accounts, donations, bookings, and wallet. What do you need help with?'
                   : null;
     let nextContextOverride: ConversationContextState | null = null;
 

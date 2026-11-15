@@ -30,9 +30,12 @@ describe('wallet extended handlers', () => {
         amountKobo: 500000,
       })),
     };
-    const handler = new StartWalletTopupHandler(blivap as never, {
-      get: () => 'https://app.blivap.com/wallet',
-    } as never);
+    const handler = new StartWalletTopupHandler(
+      blivap as never,
+      {
+        get: () => 'https://app.blivap.com/wallet',
+      } as never,
+    );
     const result = await handler.execute({
       actionName: 'start_wallet_topup',
       conversationId: 'c1',

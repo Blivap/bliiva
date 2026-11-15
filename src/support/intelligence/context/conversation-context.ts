@@ -178,7 +178,8 @@ function readPending(value: unknown): PendingClarification | null {
       typeof pending.escalationReason === 'string'
         ? pending.escalationReason
         : undefined,
-    priority: typeof pending.priority === 'string' ? pending.priority : undefined,
+    priority:
+      typeof pending.priority === 'string' ? pending.priority : undefined,
   };
 }
 

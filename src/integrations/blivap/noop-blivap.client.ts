@@ -42,11 +42,17 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     return this.unavailable('getProfile');
   }
 
-  updateProfile(_ctx: BlivapCallContext, _patch: Record<string, unknown>): Promise<BlivapUserProfile> {
+  updateProfile(
+    _ctx: BlivapCallContext,
+    _patch: Record<string, unknown>,
+  ): Promise<BlivapUserProfile> {
     return this.unavailable('updateProfile');
   }
 
-  changePassword(_ctx: BlivapCallContext, _input: { oldPassword: string; password: string }): Promise<{ ok: boolean }> {
+  changePassword(
+    _ctx: BlivapCallContext,
+    _input: { oldPassword: string; password: string },
+  ): Promise<{ ok: boolean }> {
     return this.unavailable('changePassword');
   }
 
@@ -54,7 +60,10 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     return this.unavailable('requestPasswordReset');
   }
 
-  submitNinVerification(_ctx: BlivapCallContext, _nin: string): Promise<Record<string, unknown>> {
+  submitNinVerification(
+    _ctx: BlivapCallContext,
+    _nin: string,
+  ): Promise<Record<string, unknown>> {
     return this.unavailable('submitNinVerification');
   }
 
@@ -62,11 +71,17 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     return this.unavailable('getWalletSummary');
   }
 
-  startWalletTopup(_ctx: BlivapCallContext, _input: { amountKobo: number; callbackUrl: string }): Promise<BlivapTopupStart> {
+  startWalletTopup(
+    _ctx: BlivapCallContext,
+    _input: { amountKobo: number; callbackUrl: string },
+  ): Promise<BlivapTopupStart> {
     return this.unavailable('startWalletTopup');
   }
 
-  verifyWalletTopup(_ctx: BlivapCallContext, _reference: string): Promise<BlivapWalletSummary> {
+  verifyWalletTopup(
+    _ctx: BlivapCallContext,
+    _reference: string,
+  ): Promise<BlivapWalletSummary> {
     return this.unavailable('verifyWalletTopup');
   }
 
@@ -78,19 +93,31 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     return this.unavailable('listBankAccounts');
   }
 
-  resolveBankAccount(_ctx: BlivapCallContext, _input: { accountNumber: string; bank?: string }): Promise<Record<string, unknown>> {
+  resolveBankAccount(
+    _ctx: BlivapCallContext,
+    _input: { accountNumber: string; bank?: string },
+  ): Promise<Record<string, unknown>> {
     return this.unavailable('resolveBankAccount');
   }
 
-  addBankAccount(_ctx: BlivapCallContext, _input: { accountNumber: string; bank?: string }): Promise<BlivapBankAccount> {
+  addBankAccount(
+    _ctx: BlivapCallContext,
+    _input: { accountNumber: string; bank?: string },
+  ): Promise<BlivapBankAccount> {
     return this.unavailable('addBankAccount');
   }
 
-  setPrimaryBankAccount(_ctx: BlivapCallContext, _accountId: string): Promise<BlivapBankAccount> {
+  setPrimaryBankAccount(
+    _ctx: BlivapCallContext,
+    _accountId: string,
+  ): Promise<BlivapBankAccount> {
     return this.unavailable('setPrimaryBankAccount');
   }
 
-  removeBankAccount(_ctx: BlivapCallContext, _accountId: string): Promise<void> {
+  removeBankAccount(
+    _ctx: BlivapCallContext,
+    _accountId: string,
+  ): Promise<void> {
     return this.unavailable('removeBankAccount');
   }
 
@@ -98,67 +125,127 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     return this.unavailable('listPayouts');
   }
 
-  getPayout(_ctx: BlivapCallContext, _payoutId: string): Promise<BlivapPayoutSummary> {
+  getPayout(
+    _ctx: BlivapCallContext,
+    _payoutId: string,
+  ): Promise<BlivapPayoutSummary> {
     return this.unavailable('getPayout');
   }
 
-  startWalletPayout(_ctx: BlivapCallContext, _input: { amountKobo: number; bankAccountId?: string }): Promise<BlivapPayoutSummary> {
+  startWalletPayout(
+    _ctx: BlivapCallContext,
+    _input: { amountKobo: number; bankAccountId?: string },
+  ): Promise<BlivapPayoutSummary> {
     return this.unavailable('startWalletPayout');
   }
 
-  confirmWalletPayout(_ctx: BlivapCallContext, _payoutId: string, _otp: string): Promise<BlivapPayoutSummary> {
+  confirmWalletPayout(
+    _ctx: BlivapCallContext,
+    _payoutId: string,
+    _otp: string,
+  ): Promise<BlivapPayoutSummary> {
     return this.unavailable('confirmWalletPayout');
   }
 
-  resendPayoutOtp(_ctx: BlivapCallContext, _payoutId: string): Promise<BlivapPayoutSummary> {
+  resendPayoutOtp(
+    _ctx: BlivapCallContext,
+    _payoutId: string,
+  ): Promise<BlivapPayoutSummary> {
     return this.unavailable('resendPayoutOtp');
   }
 
-  getDonationHistory(_ctx: BlivapCallContext): Promise<BlivapDonationSummary[]> {
+  getDonationHistory(
+    _ctx: BlivapCallContext,
+  ): Promise<BlivapDonationSummary[]> {
     return this.unavailable('getDonationHistory');
   }
 
-  listBookings(_ctx: BlivapCallContext, _query?: { filter?: string; limit?: number }): Promise<BlivapDonationSummary[]> {
+  listBookings(
+    _ctx: BlivapCallContext,
+    _query?: { filter?: string; limit?: number },
+  ): Promise<BlivapDonationSummary[]> {
     return this.unavailable('listBookings');
   }
 
-  getDonationStatus(_ctx: BlivapCallContext, _donationId: string): Promise<BlivapDonationSummary | null> {
+  getDonationStatus(
+    _ctx: BlivapCallContext,
+    _donationId: string,
+  ): Promise<BlivapDonationSummary | null> {
     return this.unavailable('getDonationStatus');
   }
 
-  requestBooking(_ctx: BlivapCallContext, _input: { donorUserId: string; hospitalId: string; scheduledAt: string; bloodRequestId?: string; donationType?: string }): Promise<BlivapDonationSummary> {
+  requestBooking(
+    _ctx: BlivapCallContext,
+    _input: {
+      donorUserId: string;
+      hospitalId: string;
+      scheduledAt: string;
+      bloodRequestId?: string;
+      donationType?: string;
+    },
+  ): Promise<BlivapDonationSummary> {
     return this.unavailable('requestBooking');
   }
 
-  acceptBooking(_ctx: BlivapCallContext, _bookingId: string): Promise<BlivapDonationSummary> {
+  acceptBooking(
+    _ctx: BlivapCallContext,
+    _bookingId: string,
+  ): Promise<BlivapDonationSummary> {
     return this.unavailable('acceptBooking');
   }
 
-  declineBooking(_ctx: BlivapCallContext, _bookingId: string): Promise<BlivapDonationSummary> {
+  declineBooking(
+    _ctx: BlivapCallContext,
+    _bookingId: string,
+  ): Promise<BlivapDonationSummary> {
     return this.unavailable('declineBooking');
   }
 
-  cancelBooking(_ctx: BlivapCallContext, _bookingId: string): Promise<BlivapDonationSummary> {
+  cancelBooking(
+    _ctx: BlivapCallContext,
+    _bookingId: string,
+  ): Promise<BlivapDonationSummary> {
     return this.unavailable('cancelBooking');
   }
 
-  reportBooking(_ctx: BlivapCallContext, _bookingId: string, _input: { reason: string; details?: string }): Promise<BlivapDonationSummary> {
+  reportBooking(
+    _ctx: BlivapCallContext,
+    _bookingId: string,
+    _input: { reason: string; details?: string },
+  ): Promise<BlivapDonationSummary> {
     return this.unavailable('reportBooking');
   }
 
-  getBloodRequests(_ctx: BlivapCallContext): Promise<BlivapBloodRequestSummary[]> {
+  getBloodRequests(
+    _ctx: BlivapCallContext,
+  ): Promise<BlivapBloodRequestSummary[]> {
     return this.unavailable('getBloodRequests');
   }
 
-  getBloodRequestStatus(_ctx: BlivapCallContext, _requestId: string): Promise<BlivapBloodRequestSummary | null> {
+  getBloodRequestStatus(
+    _ctx: BlivapCallContext,
+    _requestId: string,
+  ): Promise<BlivapBloodRequestSummary | null> {
     return this.unavailable('getBloodRequestStatus');
   }
 
-  createBloodRequest(_ctx: BlivapCallContext, _input: { neededBloodType: string; location: { type: "Point"; coordinates: [number, number] }; city?: string; state?: string; urgent?: boolean; notes?: string }): Promise<BlivapBloodRequestSummary> {
+  createBloodRequest(
+    _ctx: BlivapCallContext,
+    _input: {
+      neededBloodType: string;
+      location: { type: 'Point'; coordinates: [number, number] };
+      city?: string;
+      state?: string;
+      urgent?: boolean;
+      notes?: string;
+    },
+  ): Promise<BlivapBloodRequestSummary> {
     return this.unavailable('createBloodRequest');
   }
 
-  getDonorProfile(_ctx: BlivapCallContext): Promise<Record<string, unknown> | null> {
+  getDonorProfile(
+    _ctx: BlivapCallContext,
+  ): Promise<Record<string, unknown> | null> {
     return this.unavailable('getDonorProfile');
   }
 
@@ -169,31 +256,51 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     return this.unavailable('listDonors');
   }
 
-  registerDonor(_ctx: BlivapCallContext, _input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  registerDonor(
+    _ctx: BlivapCallContext,
+    _input: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     return this.unavailable('registerDonor');
   }
 
-  updateDonorLocation(_ctx: BlivapCallContext, _input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  updateDonorLocation(
+    _ctx: BlivapCallContext,
+    _input: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     return this.unavailable('updateDonorLocation');
   }
 
-  updateMeetupCare(_ctx: BlivapCallContext, _input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  updateMeetupCare(
+    _ctx: BlivapCallContext,
+    _input: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     return this.unavailable('updateMeetupCare');
   }
 
-  getNotificationSettings(_ctx: BlivapCallContext): Promise<BlivapNotificationSettings> {
+  getNotificationSettings(
+    _ctx: BlivapCallContext,
+  ): Promise<BlivapNotificationSettings> {
     return this.unavailable('getNotificationSettings');
   }
 
-  listNotifications(_ctx: BlivapCallContext, _limit?: number): Promise<BlivapNotificationItem[]> {
+  listNotifications(
+    _ctx: BlivapCallContext,
+    _limit?: number,
+  ): Promise<BlivapNotificationItem[]> {
     return this.unavailable('listNotifications');
   }
 
-  updateNotificationSettings(_ctx: BlivapCallContext, _patch: Partial<BlivapNotificationSettings>): Promise<BlivapNotificationSettings> {
+  updateNotificationSettings(
+    _ctx: BlivapCallContext,
+    _patch: Partial<BlivapNotificationSettings>,
+  ): Promise<BlivapNotificationSettings> {
     return this.unavailable('updateNotificationSettings');
   }
 
-  markNotificationRead(_ctx: BlivapCallContext, _notificationId: string): Promise<void> {
+  markNotificationRead(
+    _ctx: BlivapCallContext,
+    _notificationId: string,
+  ): Promise<void> {
     return this.unavailable('markNotificationRead');
   }
 
@@ -205,39 +312,68 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     return this.unavailable('listHospitals');
   }
 
-  listWelfarePackages(_ctx: BlivapCallContext): Promise<BlivapWelfarePackage[]> {
+  listWelfarePackages(
+    _ctx: BlivapCallContext,
+  ): Promise<BlivapWelfarePackage[]> {
     return this.unavailable('listWelfarePackages');
   }
 
-  getMeetupSession(_ctx: BlivapCallContext, _sessionId: string): Promise<BlivapMeetupSession> {
+  getMeetupSession(
+    _ctx: BlivapCallContext,
+    _sessionId: string,
+  ): Promise<BlivapMeetupSession> {
     return this.unavailable('getMeetupSession');
   }
 
-  createMeetupSession(_ctx: BlivapCallContext, _bookingId: string): Promise<BlivapMeetupSession> {
+  createMeetupSession(
+    _ctx: BlivapCallContext,
+    _bookingId: string,
+  ): Promise<BlivapMeetupSession> {
     return this.unavailable('createMeetupSession');
   }
 
-  verifyMeetupCode(_ctx: BlivapCallContext, _sessionId: string, _code: string): Promise<BlivapMeetupSession> {
+  verifyMeetupCode(
+    _ctx: BlivapCallContext,
+    _sessionId: string,
+    _code: string,
+  ): Promise<BlivapMeetupSession> {
     return this.unavailable('verifyMeetupCode');
   }
 
-  confirmMeetupRequester(_ctx: BlivapCallContext, _sessionId: string): Promise<BlivapMeetupSession> {
+  confirmMeetupRequester(
+    _ctx: BlivapCallContext,
+    _sessionId: string,
+  ): Promise<BlivapMeetupSession> {
     return this.unavailable('confirmMeetupRequester');
   }
 
-  confirmMeetupDonor(_ctx: BlivapCallContext, _sessionId: string): Promise<BlivapMeetupSession> {
+  confirmMeetupDonor(
+    _ctx: BlivapCallContext,
+    _sessionId: string,
+  ): Promise<BlivapMeetupSession> {
     return this.unavailable('confirmMeetupDonor');
   }
 
-  completeMeetup(_ctx: BlivapCallContext, _sessionId: string): Promise<BlivapMeetupSession> {
+  completeMeetup(
+    _ctx: BlivapCallContext,
+    _sessionId: string,
+  ): Promise<BlivapMeetupSession> {
     return this.unavailable('completeMeetup');
   }
 
-  terminateMeetup(_ctx: BlivapCallContext, _sessionId: string, _reason?: string): Promise<BlivapMeetupSession> {
+  terminateMeetup(
+    _ctx: BlivapCallContext,
+    _sessionId: string,
+    _reason?: string,
+  ): Promise<BlivapMeetupSession> {
     return this.unavailable('terminateMeetup');
   }
 
-  reportMeetup(_ctx: BlivapCallContext, _sessionId: string, _input: { reason: string; details?: string }): Promise<BlivapMeetupSession> {
+  reportMeetup(
+    _ctx: BlivapCallContext,
+    _sessionId: string,
+    _input: { reason: string; details?: string },
+  ): Promise<BlivapMeetupSession> {
     return this.unavailable('reportMeetup');
   }
 
@@ -245,7 +381,9 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     return this.unavailable('resendVerificationEmail');
   }
 
-  notifyUser(_payload: BlivapNotificationRequest): Promise<{ accepted: boolean }> {
+  notifyUser(
+    _payload: BlivapNotificationRequest,
+  ): Promise<{ accepted: boolean }> {
     return this.unavailable('notifyUser');
   }
 }

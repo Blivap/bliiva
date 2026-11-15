@@ -19,9 +19,15 @@ export class ListBanksHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
-    const banks = await this.blivap.listBanks(requireBlivapContext(request.actor));
-    const lines = banks.slice(0, 15).map((b, i) => `${i + 1}. ${b.bank} (${b.code})`);
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
+    const banks = await this.blivap.listBanks(
+      requireBlivapContext(request.actor),
+    );
+    const lines = banks
+      .slice(0, 15)
+      .map((b, i) => `${i + 1}. ${b.bank} (${b.code})`);
     return {
       status: ActionStatus.Success,
       actionName: this.name,
@@ -37,7 +43,9 @@ export class ListBankAccountsHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const rows = await this.blivap.listBankAccounts(
       requireBlivapContext(request.actor),
     );
@@ -75,8 +83,12 @@ export class ListPayoutsHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
-    const rows = await this.blivap.listPayouts(requireBlivapContext(request.actor));
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
+    const rows = await this.blivap.listPayouts(
+      requireBlivapContext(request.actor),
+    );
     if (!rows.length) {
       return {
         status: ActionStatus.Success,
@@ -112,7 +124,9 @@ export class GetPayoutHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const payoutId = request.params.payoutId;
     if (!payoutId) {
       return {
@@ -151,8 +165,12 @@ export class StartWalletTopupHandler implements ActionHandler {
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
     private readonly config: ConfigService,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
-    const amountNaira = Number(request.params.amountNaira ?? request.params.amount);
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
+    const amountNaira = Number(
+      request.params.amountNaira ?? request.params.amount,
+    );
     if (!Number.isFinite(amountNaira) || amountNaira <= 0) {
       return {
         status: ActionStatus.NeedsParameter,
@@ -193,7 +211,9 @@ export class VerifyWalletTopupHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const reference = request.params.reference;
     if (!reference) {
       return {
@@ -226,8 +246,12 @@ export class StartWalletPayoutHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
-    const amountNaira = Number(request.params.amountNaira ?? request.params.amount);
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
+    const amountNaira = Number(
+      request.params.amountNaira ?? request.params.amount,
+    );
     if (!Number.isFinite(amountNaira) || amountNaira < 100) {
       return {
         status: ActionStatus.NeedsParameter,
@@ -264,7 +288,9 @@ export class ConfirmWalletPayoutHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const payoutId = request.params.payoutId;
     const otp = request.params.otp;
     if (!payoutId) {
@@ -305,7 +331,9 @@ export class ResendPayoutOtpHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const payoutId = request.params.payoutId;
     if (!payoutId) {
       return {
@@ -336,7 +364,9 @@ export class AddBankAccountHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const accountNumber = request.params.accountNumber;
     if (!accountNumber || !/^\d{10}$/.test(accountNumber)) {
       return {
@@ -367,7 +397,9 @@ export class SetPrimaryBankAccountHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const bankAccountId = request.params.bankAccountId;
     if (!bankAccountId) {
       return {
@@ -398,7 +430,9 @@ export class RemoveBankAccountHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const bankAccountId = request.params.bankAccountId;
     if (!bankAccountId) {
       return {
