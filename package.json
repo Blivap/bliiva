@@ -29,6 +29,7 @@
     "docker:up": "./scripts/docker-up.sh",
     "docker:down": "docker compose --project-directory . -f docker-compose.yml down",
     "docker:logs": "docker compose --project-directory . -f docker-compose.yml logs -f",
+    "docker:live": "docker compose --project-directory . -f docker-compose.prod.yml up -d",
     "ci": "yarn lint && yarn format:check && yarn typecheck && yarn test:cov && yarn test:e2e && yarn build"
   },
   "dependencies": {

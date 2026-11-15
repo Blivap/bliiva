@@ -1,8 +1,8 @@
-# All runtime data stays under this project directory:
-#   ./.ollama  — chat + embedding model weights
-#   ./data/mongo, ./data/redis — databases
-# Run from the app folder:  docker compose up -d --build
-# Or:  ./scripts/docker-up.sh
+# Local / testing stack. MongoDB + Redis always come from Compose containers
+# (Docker named volumes). Live uses MONGODB_URI + REDIS_URL — see docker-compose.prod.yml.
+#
+# Models: ./.ollama (gitignored)
+# Run: yarn docker:up   or   docker compose up -d --build
 
 name: bliiva
 
@@ -13,7 +13,7 @@ services:
     ports:
       - '27017:27017'
     volumes:
-      - ./data/mongo:/data/db
+      - bliiva_mongo_data:/data/db
     environment:
       MONGO_INITDB_DATABASE: bliiva_support
     healthcheck:
@@ -30,7 +30,7 @@ services:
       - '6379:6379'
     command: ['redis-server', '--appendonly', 'yes']
     volumes:
-      - ./data/redis:/data
+      - bliiva_redis_data:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -57,12 +57,10 @@ services:
       retries: 12
       start_period: 15s
 
-  # Ensure models exist in ./.ollama and warm the chat model once.
+  # Ensure models exist in ./.ollama and warm the chat model once (non-interactive).
   ollama-warm:
-    image: ollama/ollama:latest
+    image: curlimages/curl:8.12.1
     restart: 'no'
-    volumes:
-      - ./.ollama:/root/.ollama
     environment:
       OLLAMA_HOST: http://ollama:11434
       LLM_MODEL: ${LLM_MODEL:-qwen3:1.7b}
@@ -71,7 +69,7 @@ services:
       [
         '/bin/sh',
         '-c',
-        'ollama pull "$$LLM_MODEL" && ollama pull "$$EMBEDDING_MODEL" && ollama run "$$LLM_MODEL" /no_think hi',
+        'set -e; echo "warming $$LLM_MODEL"; curl -sf "$$OLLAMA_HOST/api/tags" >/dev/null; curl -sf "$$OLLAMA_HOST/api/pull" -d "{\"name\":\"$$LLM_MODEL\"}"; curl -sf "$$OLLAMA_HOST/api/pull" -d "{\"name\":\"$$EMBEDDING_MODEL\"}"; curl -sf "$$OLLAMA_HOST/api/chat" -d "{\"model\":\"$$LLM_MODEL\",\"stream\":false,\"think\":false,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"options\":{\"num_predict\":16}}"; echo warm-ok',
       ]
     depends_on:
       ollama:
@@ -100,15 +98,19 @@ services:
       LLM_MODEL: ${LLM_MODEL:-qwen3:1.7b}
       # Catalog knowledge grounds how-tos without embedding thrash on small VMs.
       RAG_ENABLED: 'false'
-      LLM_NUM_CTX: ${LLM_NUM_CTX:-1024}
-      LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-192}
-      LLM_MAX_CONTEXT_TOKENS: ${LLM_MAX_CONTEXT_TOKENS:-1536}
+      # System + support turn alone is ~2k tokens; leave headroom for notes/history.
+      LLM_NUM_CTX: ${LLM_NUM_CTX:-4096}
+      LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-256}
+      LLM_MAX_CONTEXT_TOKENS: ${LLM_MAX_CONTEXT_TOKENS:-4096}
       LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-180000}
       LLM_KEEP_ALIVE: ${LLM_KEEP_ALIVE:-30m}
+      # Testing: always use Compose Mongo/Redis (ignore any live strings in .env).
       MONGODB_URI: mongodb://mongo:27017/bliiva_support
+      REDIS_URL: ''
       REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 1
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: ''
+      REDIS_DB: '1'
       BLIVAP_API_BASE_URL: http://host.docker.internal:2001
       BLIVAP_CLIENT: http
     depends_on:
@@ -132,3 +134,7 @@ services:
       timeout: 5s
       retries: 20
       start_period: 40s
+
+volumes:
+  bliiva_mongo_data:
+  bliiva_redis_data:

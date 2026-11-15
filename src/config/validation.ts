@@ -6,15 +6,33 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(3000),
   API_PREFIX: Joi.string().default('api/v1'),
-  MONGODB_URI: Joi.string().default('mongodb://localhost:27017/bliiva_support'),
-  REDIS_URL: Joi.string()
-    .uri({ scheme: ['redis', 'rediss'] })
-    .allow('')
-    .optional(),
-  REDIS_HOST: Joi.string().default('localhost'),
-  REDIS_PORT: Joi.number().default(6379),
+  // Local/test: Compose mongo container (or localhost). Live: required connection string.
+  MONGODB_URI: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().required().min(1),
+    otherwise: Joi.string().default(
+      'mongodb://localhost:27017/bliiva_support',
+    ),
+  }),
+  // Live: required REDIS_URL. Local/test Docker clears it and uses REDIS_HOST=redis.
+  REDIS_URL: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string()
+      .uri({ scheme: ['redis', 'rediss'] })
+      .required(),
+    otherwise: Joi.string()
+      .uri({ scheme: ['redis', 'rediss'] })
+      .allow('')
+      .optional(),
+  }),
+  REDIS_HOST: Joi.string().allow('').default('localhost'),
+  REDIS_PORT: Joi.alternatives()
+    .try(Joi.number(), Joi.string().allow(''))
+    .default(6379),
   REDIS_PASSWORD: Joi.string().allow('').optional(),
-  REDIS_DB: Joi.number().default(0),
+  REDIS_DB: Joi.alternatives()
+    .try(Joi.number(), Joi.string().allow(''))
+    .default(0),
   REDIS_KEY_PREFIX: Joi.string().default('bliiva:'),
   BULLMQ_PREFIX: Joi.string().default('{bliiva}'),
   SWAGGER_ENABLED: Joi.string().valid('true', 'false').default('true'),

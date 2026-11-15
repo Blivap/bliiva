@@ -10,7 +10,7 @@ Bliiva keeps the Phase 1/2 deterministic engine as the safety net. When `LLM_ENA
 yarn docker:up
 ```
 
-Everything stays under this repo: `./.ollama` (models), `./data/mongo`, `./data/redis`. Compose mounts those paths; the API talks to `http://ollama:11434`. Host Homebrew Ollama should stay stopped so port `11434` is free.
+Models live in `./.ollama`. Mongo/Redis use Docker named volumes. The API talks to `http://ollama:11434`. Host Homebrew Ollama should stay stopped so port `11434` is free.
 
 2. `.env` essentials (Compose overrides DB/LLM URLs inside containers):
 

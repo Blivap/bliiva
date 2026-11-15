@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Bring up the full stack using only paths inside this app folder.
+# Bring up the full local/test stack from this app folder.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-mkdir -p .ollama data/mongo data/redis
+mkdir -p .ollama
 
 # Free 11434 so Compose Ollama (./.ollama) owns inference — not host brew.
 if command -v brew >/dev/null 2>&1; then
@@ -16,8 +16,8 @@ killall ollama >/dev/null 2>&1 || true
 
 echo "Starting Bliiva from $ROOT"
 echo "  models:  $ROOT/.ollama"
-echo "  mongo:   $ROOT/data/mongo"
-echo "  redis:   $ROOT/data/redis"
+echo "  mongo:   docker volume bliiva_mongo_data"
+echo "  redis:   docker volume bliiva_redis_data"
 
 docker compose \
   --project-directory "$ROOT" \

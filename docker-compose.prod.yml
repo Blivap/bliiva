@@ -1,50 +1,18 @@
-# Production stack. The image is published by CI; this file does not build it.
-# Place a private .env next to this file on the server. It is never copied by deploy.
-# Required at runtime: SUPPORT_SERVICE_API_KEY, and OBSERVE_APP_KEY / OBSERVE_APP_SECRET
-# when telemetry should leave the box. MongoDB and Redis stay on the internal network.
+# Live / production API only.
+# MongoDB and Redis come from connection strings in .env — not Compose services.
+#
+# Required in .env:
+#   MONGODB_URI=mongodb+srv://...   (or mongodb://user:pass@host:27017/bliiva_support)
+#   REDIS_URL=rediss://...          (or redis://host:6379/1)
+#   SUPPORT_SERVICE_API_KEY=...
+#   BLIIVA_IMAGE=ghcr.io/...
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+
+name: bliiva-live
 
 services:
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    volumes:
-      - bliiva_mongo_data:/data/db
-    environment:
-      MONGO_INITDB_DATABASE: bliiva_support
-    networks:
-      - bliiva
-    healthcheck:
-      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    logging:
-      driver: json-file
-      options:
-        max-size: '10m'
-        max-file: '5'
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ['redis-server', '--appendonly', 'yes']
-    volumes:
-      - bliiva_redis_data:/data
-    networks:
-      - bliiva
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-    logging:
-      driver: json-file
-      options:
-        max-size: '10m'
-        max-file: '5'
-
   api:
     image: ${BLIIVA_IMAGE:?Set BLIIVA_IMAGE to the published ghcr.io image}
     restart: unless-stopped
@@ -56,19 +24,13 @@ services:
       - .env
     environment:
       NODE_ENV: production
-      # Compose Mongo/Redis on the internal network. To use a managed Redis
-      # instead, set REDIS_URL in .env (it takes precedence over REDIS_HOST).
-      MONGODB_URI: mongodb://mongo:27017/bliiva_support
-      REDIS_HOST: redis
-      REDIS_PORT: '6379'
-      REDIS_DB: '1'
-    depends_on:
-      mongo:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - bliiva
+      # Live data stores — only from env connection strings (never Compose mongo/redis).
+      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI to the live MongoDB connection string}
+      REDIS_URL: ${REDIS_URL:?Set REDIS_URL to the live Redis connection string}
+      # Clear discrete Redis host vars so REDIS_URL is the only source in live.
+      REDIS_HOST: ''
+      REDIS_PORT: ''
+      REDIS_PASSWORD: ''
     security_opt:
       - no-new-privileges:true
     healthcheck:
@@ -88,10 +50,3 @@ services:
       options:
         max-size: '10m'
         max-file: '5'
-
-volumes:
-  bliiva_mongo_data:
-  bliiva_redis_data:
-
-networks:
-  bliiva:

@@ -55,7 +55,7 @@ pids
 *.seed
 *.pid.lock
 
-# Local Ollama model store + compose bind data (do not commit)
+# Local Ollama model store + leftover bind-mount dirs (do not commit)
 .ollama/
 data/
 

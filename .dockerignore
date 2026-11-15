@@ -11,9 +11,7 @@ coverage
 .idea
 .tmp
 .temp
-# Keep model weights + DB binds on the host mounts, never bake into the image
+# Keep model weights on the host mount, never bake into the image
 .ollama
 **/.ollama
-data
-**/data
 *.tsbuildinfo

@@ -14,6 +14,8 @@ export interface UtteranceSignals {
   /** Text after a leading hi/hello/hey when the rest is a real question. */
   greetingRemainder: string | null;
   botIdentityAsk: boolean;
+  /** Creative / unrelated chat that should not hit the LLM on small hosts. */
+  smallTalkOffTopic: boolean;
   followUpFailure: boolean;
   frustrated: boolean;
 }
@@ -40,6 +42,9 @@ const SELECTION =
   /^(that one|this one|the first one|the second one|the third one)$/;
 const BOT_IDENTITY =
   /^(your name|name\??)$|\b((what is|whats|who is) your name|who are you|what are you\b(?! called)|what are you called|do you have a name|how can i address you|what should i call you|how (?:should|do) i address you|what can you do(?: for me)?|what do you do|how can you help|what do you help with|are you (an?|and)?\s*(ai|bot|robot|assistant|llm)|are you (real|human)|is this (an? )?(ai|bot))\b/;
+/** Songs, jokes, poems, or bare challenges — keep off the slow local LLM path. */
+const SMALL_TALK_OFF_TOPIC =
+  /\b(write|sing|make|compose|tell|give)\b.{0,40}\b(song|poem|joke|story|rap|haiku)\b|\b(tell me a joke|sing (me )?a song|write (me )?a song)\b|^(that is a lie|thats a lie|you('re| are) (wrong|lying)|why do you repeat)\b/;
 
 const ORDINALS: Record<string, number> = {
   first: 0,
@@ -70,6 +75,7 @@ export function detectUtterance(normalized: string): UtteranceSignals {
   }
 
   const botIdentityAsk = BOT_IDENTITY.test(text);
+  const smallTalkOffTopic = SMALL_TALK_OFF_TOPIC.test(text);
   const presenceCheck = PRESENCE_CHECK.test(text) || BRAND_PING.test(text);
   const prefixMatch = text.match(GREETING_PREFIX);
   const afterGreeting = prefixMatch
@@ -100,6 +106,7 @@ export function detectUtterance(normalized: string): UtteranceSignals {
     correctionRemainder,
     greetingRemainder,
     botIdentityAsk,
+    smallTalkOffTopic,
     followUpFailure: FOLLOW_UP_FAILURE.test(text),
     frustrated: FRUSTRATION.test(text),
   };
