@@ -13,12 +13,12 @@ import { emptyContext, resolvePendingReply } from './conversation-context.js';
 describe('offered action go-ahead', () => {
   it('detects balance and booking offers from bot copy', () => {
     expect(
-      botOfferedAction(
-        'Your balance is available. Want me to show it to you?',
-      ),
+      botOfferedAction('Your balance is available. Want me to show it to you?'),
     ).toBe(true);
     expect(
-      botOfferedAction("Ok. Let's check your bookings. Want me to show it to you?"),
+      botOfferedAction(
+        "Ok. Let's check your bookings. Want me to show it to you?",
+      ),
     ).toBe(true);
     expect(botOfferedAction('Anything else?')).toBe(false);
   });
@@ -43,8 +43,7 @@ describe('offered action go-ahead', () => {
     const state = {
       ...emptyContext(),
       currentIntent: 'WALLET_BALANCE',
-      lastBotResponse:
-        'Your balance is available. Want me to show it to you?',
+      lastBotResponse: 'Your balance is available. Want me to show it to you?',
       pendingClarification: {
         kind: 'follow_up' as const,
         question: 'Anything else?',
@@ -102,15 +101,17 @@ describe('offered action go-ahead', () => {
       actionName: 'get_wallet_summary',
       params: { focus: 'balance' },
     });
-    expect(
-      inferImmediateLiveDataAction('show my bookings'),
-    ).toMatchObject({ actionName: 'get_donations' });
+    expect(inferImmediateLiveDataAction('show my bookings')).toMatchObject({
+      actionName: 'get_donations',
+    });
     expect(
       inferImmediateLiveDataAction('do i have unread notifications?'),
     ).toMatchObject({ actionName: 'list_notifications' });
-    expect(inferImmediateLiveDataAction('show my bank accounts')).toMatchObject({
-      actionName: 'list_bank_accounts',
-    });
+    expect(inferImmediateLiveDataAction('show my bank accounts')).toMatchObject(
+      {
+        actionName: 'list_bank_accounts',
+      },
+    );
     expect(inferImmediateLiveDataAction('list my payouts')).toMatchObject({
       actionName: 'list_payouts',
     });

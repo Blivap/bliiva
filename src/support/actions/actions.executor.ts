@@ -51,8 +51,8 @@ export class ActionsExecutor {
     const authError = this.authorize(definition, request, {
       // Asking "Resend verification?" only needs a signed-in user id.
       // The Blivap access token is required when the action actually runs.
-      requireAccessToken: Boolean(request.confirmationId) ||
-        !definition.requiresConfirmation,
+      requireAccessToken:
+        Boolean(request.confirmationId) || !definition.requiresConfirmation,
     });
     if (authError) return authError;
 

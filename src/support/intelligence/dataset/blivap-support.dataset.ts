@@ -380,10 +380,7 @@ export const blivapIntents: IntentDefinition[] = [
       'my wallet balance',
     ],
     synonyms: ['funds'],
-    examples: [
-      'How much do I have in my wallet?',
-      'I want to know my balance',
-    ],
+    examples: ['How much do I have in my wallet?', 'I want to know my balance'],
     negativeKeywords: [
       'unauthorized',
       'hacked',

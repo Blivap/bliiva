@@ -5,8 +5,7 @@
 
 const THINK_BLOCK = /<think>[\s\S]*?<\/think>/gi;
 const THINK_TAG = /<\/?think>/gi;
-const SECRET_INLINE =
-  /\b(password|otp|access token)\s*[:=]\s*\S+/gi;
+const SECRET_INLINE = /\b(password|otp|access token)\s*[:=]\s*\S+/gi;
 
 const A = `['’]`; // ASCII or curly apostrophe
 
@@ -41,10 +40,7 @@ const REASONING_MARKERS: RegExp[] = [
   /\binvite them to ask\b/i,
   /\bnot explicitly listed\b/i,
   /\bavoid(?:ing)? any (unnecessary|technical)\b/i,
-  new RegExp(
-    `\\bi(${A}ll| will) (also )?ensure that the response\\b`,
-    'i',
-  ),
+  new RegExp(`\\bi(${A}ll| will) (also )?ensure that the response\\b`, 'i'),
   /\bthis is a bit vague\b/i,
   /\btake it as a request\b/i,
   /\breasoning:|planning:|internal (monologue|thought)\b/i,

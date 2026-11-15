@@ -62,7 +62,9 @@ describe('ollama mapper', () => {
       20,
       'qwen3:1.7b',
     );
-    expect(withBoth.message.content).toBe('Your available balance is NGN 12.50.');
+    expect(withBoth.message.content).toBe(
+      'Your available balance is NGN 12.50.',
+    );
     expect(withBoth.message.content.toLowerCase()).not.toContain('i should');
   });
 

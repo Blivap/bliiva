@@ -33,7 +33,6 @@ interface Envelope<T> {
   data?: T;
 }
 
-
 @Injectable()
 export class HttpBlivapClient implements BlivapIntegrationPort {
   private readonly logger = new Logger(HttpBlivapClient.name);
@@ -119,7 +118,9 @@ export class HttpBlivapClient implements BlivapIntegrationPort {
 
   async listBankAccounts(ctx: BlivapCallContext): Promise<BlivapBankAccount[]> {
     const rows = await this.userGet<unknown[]>(ctx, '/wallet/bank-accounts');
-    return (Array.isArray(rows) ? rows : []).map((row) => projectBankAccount(row));
+    return (Array.isArray(rows) ? rows : []).map((row) =>
+      projectBankAccount(row),
+    );
   }
 
   resolveBankAccount(
@@ -137,7 +138,11 @@ export class HttpBlivapClient implements BlivapIntegrationPort {
     ctx: BlivapCallContext,
     input: { accountNumber: string; bank?: string },
   ): Promise<BlivapBankAccount> {
-    const raw = await this.userPost<unknown>(ctx, '/wallet/bank-accounts', input);
+    const raw = await this.userPost<unknown>(
+      ctx,
+      '/wallet/bank-accounts',
+      input,
+    );
     return projectBankAccount(raw);
   }
 
@@ -361,21 +366,31 @@ export class HttpBlivapClient implements BlivapIntegrationPort {
       ctx,
       `/donors?${params.toString()}`,
     );
-    return (Array.isArray(rows) ? rows : []).map((row) => projectDonorListItem(row));
+    return (Array.isArray(rows) ? rows : []).map((row) =>
+      projectDonorListItem(row),
+    );
   }
 
   registerDonor(
     ctx: BlivapCallContext,
     input: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.userPost<Record<string, unknown>>(ctx, '/donors/register', input);
+    return this.userPost<Record<string, unknown>>(
+      ctx,
+      '/donors/register',
+      input,
+    );
   }
 
   updateDonorLocation(
     ctx: BlivapCallContext,
     input: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    return this.userPatch<Record<string, unknown>>(ctx, '/donors/location', input);
+    return this.userPatch<Record<string, unknown>>(
+      ctx,
+      '/donors/location',
+      input,
+    );
   }
 
   updateMeetupCare(
@@ -407,7 +422,9 @@ export class HttpBlivapClient implements BlivapIntegrationPort {
       ctx,
       `/notifications?limit=${capped}`,
     );
-    return normalizeNotificationRows(raw).map((row) => projectNotification(row));
+    return normalizeNotificationRows(raw).map((row) =>
+      projectNotification(row),
+    );
   }
 
   updateNotificationSettings(
@@ -437,7 +454,9 @@ export class HttpBlivapClient implements BlivapIntegrationPort {
     await this.userPost(ctx, '/notifications/mark-all-read', {}, true);
   }
 
-  async listHospitals(ctx: BlivapCallContext): Promise<BlivapHospitalSummary[]> {
+  async listHospitals(
+    ctx: BlivapCallContext,
+  ): Promise<BlivapHospitalSummary[]> {
     const rows = await this.userGet<unknown[]>(ctx, '/hospitals');
     return (Array.isArray(rows) ? rows : []).map((row) => {
       const record = asRecord(row);
@@ -578,7 +597,6 @@ export class HttpBlivapClient implements BlivapIntegrationPort {
     await this.serviceRequest('POST', '/support/notify', payload);
     return { accepted: true };
   }
-
 
   private userGet<T>(ctx: BlivapCallContext, path: string): Promise<T> {
     return this.userRequest<T>('GET', ctx, path);
@@ -907,7 +925,6 @@ function projectNotification(raw: unknown): BlivapNotificationItem {
     createdAt: dateField(row.createdAt),
   };
 }
-
 
 function projectBankAccount(raw: unknown): BlivapBankAccount {
   const row = asRecord(raw);

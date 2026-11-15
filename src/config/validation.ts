@@ -10,9 +10,7 @@ export const envValidationSchema = Joi.object({
   MONGODB_URI: Joi.when('NODE_ENV', {
     is: 'production',
     then: Joi.string().required().min(1),
-    otherwise: Joi.string().default(
-      'mongodb://localhost:27017/bliiva_support',
-    ),
+    otherwise: Joi.string().default('mongodb://localhost:27017/bliiva_support'),
   }),
   // Live: required REDIS_URL. Local/test Docker clears it and uses REDIS_HOST=redis.
   REDIS_URL: Joi.when('NODE_ENV', {

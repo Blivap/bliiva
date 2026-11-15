@@ -18,11 +18,16 @@ export class ListBookingsHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
-    const rows = await this.blivap.listBookings(requireBlivapContext(request.actor), {
-      filter: request.params.filter,
-      limit: 20,
-    });
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
+    const rows = await this.blivap.listBookings(
+      requireBlivapContext(request.actor),
+      {
+        filter: request.params.filter,
+        limit: 20,
+      },
+    );
     if (!rows.length) {
       return {
         status: ActionStatus.Success,
@@ -58,7 +63,9 @@ export class RequestBookingHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const { donorUserId, hospitalId, scheduledAt } = request.params;
     if (!donorUserId || !hospitalId || !scheduledAt) {
       return {
@@ -96,7 +103,9 @@ export class AcceptBookingHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const bookingId = request.params.bookingId ?? request.params.donationId;
     if (!bookingId) {
       return {
@@ -127,7 +136,9 @@ export class DeclineBookingHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const bookingId = request.params.bookingId ?? request.params.donationId;
     if (!bookingId) {
       return {
@@ -158,7 +169,9 @@ export class ReportBookingHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const bookingId = request.params.bookingId ?? request.params.donationId;
     const reason = request.params.reason;
     if (!bookingId || !reason) {
@@ -191,7 +204,9 @@ export class CreateBloodRequestHandler implements ActionHandler {
   constructor(
     @Inject(BLIVAP_INTEGRATION) private readonly blivap: BlivapIntegrationPort,
   ) {}
-  async execute(request: ActionExecutionRequest): Promise<ActionExecutionResult> {
+  async execute(
+    request: ActionExecutionRequest,
+  ): Promise<ActionExecutionResult> {
     const neededBloodType = request.params.neededBloodType;
     const lng = Number(request.params.lng ?? request.params.longitude);
     const lat = Number(request.params.lat ?? request.params.latitude);

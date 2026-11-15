@@ -32,9 +32,9 @@ describe('detectUtterance greeting', () => {
     expect(
       detectUtterance(normalizeText('what can you do')).botIdentityAsk,
     ).toBe(true);
-    expect(
-      detectUtterance(normalizeText('what are you')).botIdentityAsk,
-    ).toBe(true);
+    expect(detectUtterance(normalizeText('what are you')).botIdentityAsk).toBe(
+      true,
+    );
   });
 
   it.each([
@@ -51,9 +51,7 @@ describe('detectUtterance greeting', () => {
   it.each(['write a song for me', 'tell me a joke', 'that is a lie'])(
     'treats %j as small-talk off-topic',
     (raw) => {
-      expect(
-        detectUtterance(normalizeText(raw)).smallTalkOffTopic,
-      ).toBe(true);
+      expect(detectUtterance(normalizeText(raw)).smallTalkOffTopic).toBe(true);
     },
   );
 

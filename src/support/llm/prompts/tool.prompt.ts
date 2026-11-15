@@ -2,14 +2,16 @@ import type { SupportActionDefinition } from '../../actions/actions.types.js';
 
 /** Human-facing use cases for each allowlisted Blivap action (reasoning aid). */
 const ACTION_USE_CASES: Record<string, string> = {
-  get_profile: 'profile details (name, phone, account info) via GET /authentication/me',
+  get_profile:
+    'profile details (name, phone, account info) via GET /authentication/me',
   get_account_status:
     'whether the account is active, verified, or ready via GET /authentication/me',
   get_identity_verification_status:
     'email / NIN / identity verification progress via GET /authentication/me',
   resend_email_verification:
     'resend verification email via POST /authentication/resend-email-verification-link (needs chat confirmation)',
-  update_profile: 'update profile fields via PUT /authentication/me (confirm first)',
+  update_profile:
+    'update profile fields via PUT /authentication/me (confirm first)',
   change_password:
     'change password via PUT /authentication/change-password (confirm first; never log secrets)',
   request_password_reset_email:
@@ -29,14 +31,16 @@ const ACTION_USE_CASES: Record<string, string> = {
   list_bookings: 'filtered bookings via GET /bookings',
   cancel_booking:
     'cancel a booking via PATCH /bookings/:id/cancel (needs confirmation, high risk)',
-  request_booking: 'request a booking via POST /bookings/request (confirm first)',
+  request_booking:
+    'request a booking via POST /bookings/request (confirm first)',
   accept_booking: 'accept a booking (confirm first)',
   decline_booking: 'decline a booking (confirm first)',
   report_booking: 'report a booking issue (confirm first)',
   get_blood_requests: 'user blood request list via GET /blood-requests/mine',
   get_blood_request:
     'one specific blood request by id via GET /blood-requests/mine (filter by id)',
-  create_blood_request: 'create blood request via POST /blood-requests (confirm first)',
+  create_blood_request:
+    'create blood request via POST /blood-requests (confirm first)',
   get_wallet_summary: 'wallet balance and recent transactions via GET /wallet',
   list_banks: 'supported banks via GET /wallet/banks',
   list_bank_accounts: 'saved bank accounts via GET /wallet/bank-accounts',
@@ -81,8 +85,7 @@ export function buildToolPrompt(
     enabled.length > 0
       ? enabled
           .map((action) => {
-            const useCase =
-              ACTION_USE_CASES[action.name] ?? action.description;
+            const useCase = ACTION_USE_CASES[action.name] ?? action.description;
             const confirm = action.requiresConfirmation
               ? ' [confirm in chat first]'
               : '';

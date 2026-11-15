@@ -60,18 +60,15 @@ export class HealthController {
   async llm(@Res({ passthrough: true }) response: Response) {
     const status = await this.llmProbe.readiness();
     response.status(status.ok ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE);
-    return okResponse(
-      status.ok ? 'LLM ready' : 'LLM not ready',
-      {
-        status: status.ok ? 'ok' : 'degraded',
-        utilized: status.utilized,
-        reason: status.reason,
-        provider: status.provider,
-        model: status.model,
-        baseUrl: status.baseUrl,
-        checkedAt: status.checkedAt,
-        message: status.message,
-      },
-    );
+    return okResponse(status.ok ? 'LLM ready' : 'LLM not ready', {
+      status: status.ok ? 'ok' : 'degraded',
+      utilized: status.utilized,
+      reason: status.reason,
+      provider: status.provider,
+      model: status.model,
+      baseUrl: status.baseUrl,
+      checkedAt: status.checkedAt,
+      message: status.message,
+    });
   }
 }

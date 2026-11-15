@@ -339,8 +339,13 @@ describe('support orchestrator', () => {
   it('asks before escalating a repeated unresolved question, then escalates on yes', async () => {
     const { orchestrator, conversation, escalations, conversations } =
       harness();
+    // Use unresolved off-topic turns that are not smallTalkOffTopic redirects.
     await orchestrator.process(conversation, 'what is the weather today', user);
-    await orchestrator.process(conversation, 'tell me a joke', user);
+    await orchestrator.process(
+      conversation,
+      'who is the president of mars',
+      user,
+    );
     const third = await orchestrator.process(
       conversation,
       'who won the match',
@@ -410,8 +415,7 @@ describe('support orchestrator', () => {
     conversation.context = {
       currentIntent: 'WALLET_BALANCE',
       conversationState: 'answered',
-      lastBotResponse:
-        'Your balance is available. Want me to show it to you?',
+      lastBotResponse: 'Your balance is available. Want me to show it to you?',
       pendingClarification: {
         kind: 'action_offer',
         question: 'Want me to show it to you?',
