@@ -4,32 +4,30 @@ Bliiva keeps the Phase 1/2 deterministic engine as the safety net. When `LLM_ENA
 
 ## Local development (8 GB RAM)
 
-1. Start Mongo, Redis, and optionally Ollama:
+1. One-shot stack from the app folder (Mongo, Redis, Ollama, warm model, API + seed):
 
 ```bash
-docker compose up -d mongo redis
-docker compose --profile llm up -d ollama
-docker compose exec ollama ollama pull qwen3:1.7b
-docker compose exec ollama ollama pull nomic-embed-text
+yarn docker:up
 ```
 
-2. Enable the agent in `.env`:
+Models live in `./.ollama`. Mongo/Redis use Docker named volumes. The API talks to `http://ollama:11434`. Host Homebrew Ollama should stay stopped so port `11434` is free.
+
+2. `.env` essentials (Compose overrides DB/LLM URLs inside containers):
 
 ```env
+SEED_ON_START=true
 LLM_ENABLED=true
-LLM_BASE_URL=http://127.0.0.1:11434
 LLM_MODEL=qwen3:1.7b
 EMBEDDING_MODEL=nomic-embed-text
-RAG_ENABLED=true
-VECTOR_STORE=mongodb
+RAG_ENABLED=false
 ```
 
-3. Seed knowledge, start the API, then reindex embeddings:
+3. For yarn-only API against compose Ollama:
 
 ```bash
-yarn seed:support
+docker compose up -d mongo redis ollama ollama-warm
 yarn start:dev
-# admin: POST /api/v1/support/admin/rag/reindex
+# optional RAG: admin POST /api/v1/support/admin/rag/reindex
 ```
 
 Expected memory: Ollama with Qwen3 1.7B + nomic-embed-text fits an 8 GB laptop when `LLM_MAX_CONCURRENT=1` and `LLM_NUM_CTX=2048`. Qwen3 4B needs more headroom and should not run beside heavy IDE/browser loads.

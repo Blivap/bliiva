@@ -14,20 +14,41 @@ There is **no** OpenAI / Gemini / Claude dependency. Phase 2 is a deterministic 
 - Vitest + Supertest
 - NestJS Observe
 
-## Quick start
+## Quick start (Docker — recommended)
+
+Run from this app folder. Models live in `./.ollama`; Mongo/Redis use Docker named volumes; the API image builds from this repo:
 
 ```bash
-cp .env.example .env
-docker compose up -d mongo redis
+cp .env.example .env   # first time only
+yarn docker:up
+# same as: ./scripts/docker-up.sh
+# or:      docker compose up -d --build
+```
+
+- API: `http://localhost:3100/api/v1`
+- Health: `http://localhost:3100/api/v1/health`
+- Swagger: `http://localhost:3100/docs`
+
+| Path / volume | Purpose |
+| --- | --- |
+| `./.ollama` | Qwen3 + embedding weights |
+| `bliiva_mongo_data` | Docker volume for MongoDB |
+| `bliiva_redis_data` | Docker volume for Redis |
+| `.env` | Local config (Compose overrides DB/LLM URLs for containers) |
+
+Keep host Homebrew Ollama stopped while Compose owns port `11434`.
+
+### Local yarn (API only)
+
+```bash
+docker compose up -d mongo redis ollama
 yarn install --ignore-engines
 yarn start:dev
 ```
 
-- API: `http://localhost:3000/api/v1`
-- Health: `http://localhost:3000/api/v1/health`
-- Swagger: `http://localhost:3000/docs`
+- API: `http://localhost:3000/api/v1` (or your `.env` `PORT`)
 
-Seed starter intents/knowledge (Mongo must be running):
+Optional manual seed (Compose / `SEED_ON_START=true` already seeds on boot):
 
 ```bash
 yarn seed:support
@@ -47,8 +68,10 @@ See [`.env.example`](.env.example). Important:
 
 | Variable                       | Purpose                                                                                                   |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `MONGODB_URI`                  | Support DB only — do not share Blivap app collections                                                     |
-| `REDIS_DB` / `BULLMQ_PREFIX`   | Isolate from Blivap workers                                                                               |
+| `MONGODB_URI`                  | **Live:** managed Mongo connection string. **Local/test:** Compose uses `mongo` container (overrides).  |
+| `REDIS_URL`                    | **Live:** managed Redis URL (`redis://` / `rediss://`). Wins over host/port. Leave unset for local Docker. |
+| `REDIS_HOST` / `REDIS_DB`      | Local Docker Redis (Compose sets `redis`). Ignored in live when `REDIS_URL` is set                         |
+| `BULLMQ_PREFIX`                | Isolate from Blivap workers                                                                               |
 | `SUPPORT_SERVICE_API_KEY`      | Inbound service-to-service key                                                                            |
 | `BLIVAP_API_BASE_URL`          | Blivap backend for action reads                                                                           |
 | `AUTO_HANDLE_MIN_CONFIDENCE`   | Default `0.85`. Matching score, not a probability                                                         |
@@ -57,6 +80,9 @@ See [`.env.example`](.env.example). Important:
 | `INTENT_AMBIGUITY_MARGIN`      | Default `0.08`                                                                                            |
 | `MAX_CLARIFICATION_ATTEMPTS`   | Default `2` before escalation                                                                             |
 | `INTELLIGENCE_CACHE_TTL_MS`    | Default `15000` for published intents and knowledge                                                       |
+
+**Local/testing:** `yarn docker:up` always wires the API to Compose Mongo + Redis.  
+**Live:** `docker compose -f docker-compose.prod.yml up -d` with `MONGODB_URI` + `REDIS_URL` in `.env` (no DB containers).
 
 ## Module layout
 

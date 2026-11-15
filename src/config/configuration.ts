@@ -7,14 +7,16 @@ export default () => {
     apiPrefix: process.env.API_PREFIX ?? 'api/v1',
     database: {
       uri:
-        process.env.MONGODB_URI ?? 'mongodb://localhost:27017/bliiva_support',
+        process.env.MONGODB_URI?.trim() ||
+        'mongodb://localhost:27017/bliiva_support',
     },
     redis: {
+      // Live: REDIS_URL connection string. Local/test Docker: leave unset and use host.
       url: process.env.REDIS_URL?.trim() || undefined,
-      host: process.env.REDIS_HOST ?? 'localhost',
-      port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+      host: process.env.REDIS_HOST?.trim() || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379', 10) || 6379,
       password: process.env.REDIS_PASSWORD || undefined,
-      db: parseInt(process.env.REDIS_DB ?? '0', 10),
+      db: parseInt(process.env.REDIS_DB || '0', 10) || 0,
       keyPrefix: process.env.REDIS_KEY_PREFIX ?? 'bliiva:',
     },
     bullmq: {
@@ -78,6 +80,7 @@ export default () => {
       appKey: process.env.OBSERVE_APP_KEY ?? 'YOUR_APP_KEY',
       appSecret: process.env.OBSERVE_APP_SECRET ?? 'YOUR_APP_SECRET',
     },
+    seedOnStart: process.env.SEED_ON_START !== 'false',
     llm: {
       enabled: process.env.LLM_ENABLED === 'true',
       provider: process.env.LLM_PROVIDER ?? 'ollama',

@@ -23,4 +23,13 @@ describe('configuration', () => {
       'rediss://default:secret@redis.example:6379/1',
     );
   });
+
+  it('prefers live MONGODB_URI and REDIS_URL connection strings', () => {
+    process.env.MONGODB_URI =
+      'mongodb+srv://user:pass@cluster.mongodb.net/bliiva_support';
+    process.env.REDIS_URL = 'rediss://default:secret@redis.example:6379/1';
+    const config = configuration();
+    expect(config.database.uri).toContain('mongodb+srv://');
+    expect(config.redis.url).toContain('rediss://');
+  });
 });

@@ -55,5 +55,9 @@ pids
 *.seed
 *.pid.lock
 
+# Local Ollama model store + leftover bind-mount dirs (do not commit)
+.ollama/
+data/
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

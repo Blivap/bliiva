@@ -1,4 +1,4 @@
-export const SUPPORT_PROMPT_VERSION = 'bliiva-support-v18';
+export const SUPPORT_PROMPT_VERSION = 'bliiva-support-v19';
 
 /**
  * Official Blivap AI support agent core scope.
@@ -13,7 +13,8 @@ export function buildSystemPrompt(): string {
     '',
     'Output (hard rule):',
     '- Think privately if you need to. Never send reasoning, planning, self-talk, or tool-choice notes to the user.',
-    '- User-visible text is only the short customer reply — no “Okay, let’s see,” “The user said…,” or “I need to call…”.',
+    '- User-visible text is ONLY the short customer reply — never “Okay, let’s start…,” “The customer said…,” “I’ll generate…,” or “The final reply will…”.',
+    '- Never repeat the user’s message back as your answer.',
     '',
     'Tone:',
     '- Speak naturally, like a careful teammate in a real conversation — not a script or form.',

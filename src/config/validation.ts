@@ -6,15 +6,33 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(3000),
   API_PREFIX: Joi.string().default('api/v1'),
-  MONGODB_URI: Joi.string().default('mongodb://localhost:27017/bliiva_support'),
-  REDIS_URL: Joi.string()
-    .uri({ scheme: ['redis', 'rediss'] })
-    .allow('')
-    .optional(),
-  REDIS_HOST: Joi.string().default('localhost'),
-  REDIS_PORT: Joi.number().default(6379),
+  // Local/test: Compose mongo container (or localhost). Live: required connection string.
+  MONGODB_URI: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().required().min(1),
+    otherwise: Joi.string().default(
+      'mongodb://localhost:27017/bliiva_support',
+    ),
+  }),
+  // Live: required REDIS_URL. Local/test Docker clears it and uses REDIS_HOST=redis.
+  REDIS_URL: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string()
+      .uri({ scheme: ['redis', 'rediss'] })
+      .required(),
+    otherwise: Joi.string()
+      .uri({ scheme: ['redis', 'rediss'] })
+      .allow('')
+      .optional(),
+  }),
+  REDIS_HOST: Joi.string().allow('').default('localhost'),
+  REDIS_PORT: Joi.alternatives()
+    .try(Joi.number(), Joi.string().allow(''))
+    .default(6379),
   REDIS_PASSWORD: Joi.string().allow('').optional(),
-  REDIS_DB: Joi.number().default(0),
+  REDIS_DB: Joi.alternatives()
+    .try(Joi.number(), Joi.string().allow(''))
+    .default(0),
   REDIS_KEY_PREFIX: Joi.string().default('bliiva:'),
   BULLMQ_PREFIX: Joi.string().default('{bliiva}'),
   SWAGGER_ENABLED: Joi.string().valid('true', 'false').default('true'),
@@ -42,9 +60,13 @@ export const envValidationSchema = Joi.object({
   INTELLIGENCE_CACHE_TTL_MS: Joi.number().min(1000).max(300000).default(15000),
   OBSERVE_APP_KEY: Joi.string().optional(),
   OBSERVE_APP_SECRET: Joi.string().optional(),
+  SEED_ON_START: Joi.string().valid('true', 'false').default('true'),
   LLM_ENABLED: Joi.string().valid('true', 'false').default('false'),
   LLM_PROVIDER: Joi.string().valid('ollama').default('ollama'),
-  LLM_BASE_URL: Joi.string().uri().default('http://127.0.0.1:11434'),
+  // Allow IPs and compose DNS (http://ollama:11434) — Joi.uri() rejects both otherwise.
+  LLM_BASE_URL: Joi.string()
+    .pattern(/^https?:\/\/.+/)
+    .default('http://127.0.0.1:11434'),
   LLM_MODEL: Joi.string().default('qwen3:1.7b'),
   LLM_ALTERNATIVE_MODEL: Joi.string().default('qwen3:4b'),
   LLM_TEMPERATURE: Joi.number().min(0).max(1).default(0.2),

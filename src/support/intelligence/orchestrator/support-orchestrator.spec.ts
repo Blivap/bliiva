@@ -261,6 +261,17 @@ describe('support orchestrator', () => {
     expect(turn.content).not.toContain('Couldn’t match');
   });
 
+  it.each([
+    'do you have a name',
+    'how can i address you',
+    'what should i call you',
+  ])('answers %j as Bliiva identity', async (content) => {
+    const { orchestrator, conversation } = harness();
+    const turn = await orchestrator.process(conversation, content, user);
+    expect(turn.content.toLowerCase()).toContain('bliiva');
+    expect(turn.content.toLowerCase()).toMatch(/blivap.*ai support assistant/);
+  });
+
   it('answers are-you-ai chitchat without the fallback phrase', async () => {
     const { orchestrator, conversation } = harness();
     const turn = await orchestrator.process(

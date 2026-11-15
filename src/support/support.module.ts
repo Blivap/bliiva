@@ -4,6 +4,7 @@ import { AgentModule } from './agent/agent.module.js';
 import { AgentsModule } from './agents/agents.module.js';
 import { AnalyticsModule } from './analytics/analytics.module.js';
 import { AuditModule } from './audit/audit.module.js';
+import { SupportSeedService } from './bootstrap/support-seed.service.js';
 import { ConversationsModule } from './conversations/conversations.module.js';
 import { EscalationModule } from './escalation/escalation.module.js';
 import { FeedbackModule } from './feedback/feedback.module.js';
@@ -39,6 +40,7 @@ import { ToolsModule } from './tools/tools.module.js';
     AuditModule,
     SupportGatewayModule,
   ],
+  providers: [SupportSeedService],
   exports: [
     ConversationsModule,
     MessagesModule,

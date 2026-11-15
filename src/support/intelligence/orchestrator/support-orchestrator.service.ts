@@ -426,11 +426,19 @@ export class SupportOrchestratorService {
       utterance.botIdentityAsk &&
       pending.type === 'none' &&
       !resolvedActionName;
+    const smallTalkOffTopic =
+      !humanHandling &&
+      !closed &&
+      utterance.smallTalkOffTopic &&
+      pending.type === 'none' &&
+      !resolvedActionName &&
+      !recognition.intent;
     if (
       !locked &&
       !pendingActionFlow &&
       !softAckIdle &&
       !identityAsk &&
+      !smallTalkOffTopic &&
       this.agent?.enabled() &&
       pending.type === 'none'
     ) {
@@ -549,7 +557,7 @@ export class SupportOrchestratorService {
     let assignedAgentId = conversation.assignedAgentId;
     let status = conversation.status;
     if (
-      (softAckIdle || identityAsk) &&
+      (softAckIdle || identityAsk || smallTalkOffTopic) &&
       decision.kind !== SupportDecisionKind.HumanHandling &&
       decision.kind !== SupportDecisionKind.Escalate &&
       decision.kind !== SupportDecisionKind.Emergency &&
@@ -561,7 +569,11 @@ export class SupportOrchestratorService {
         ...baseDecision,
         kind: SupportDecisionKind.Answer,
         responseType: OrchestratorResponseType.Answered,
-        reason: identityAsk ? 'bot_identity' : 'soft_ack',
+        reason: identityAsk
+          ? 'bot_identity'
+          : smallTalkOffTopic
+            ? 'small_talk_off_topic'
+            : 'soft_ack',
         knowledge: null,
         clarificationOptions: [],
         escalationReason: null,
@@ -585,7 +597,9 @@ export class SupportOrchestratorService {
               ? 'Alright — I’m here if you need anything on Blivap.'
               : decision.reason === 'bot_identity'
                 ? "I'm Bliiva — Blivap’s official AI support assistant. I can help with your Blivap account, donations, bookings, wallet, notifications, and more."
-                : null;
+                : decision.reason === 'small_talk_off_topic'
+                  ? "I’m here for Blivap support — accounts, donations, bookings, and wallet. What do you need help with?"
+                  : null;
     let nextContextOverride: ConversationContextState | null = null;
 
     if (

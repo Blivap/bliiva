@@ -32,6 +32,7 @@ import { RagService } from '../rag/rag.service.js';
 import type { RetrievedChunk } from '../rag/rag.types.js';
 import { ToolsExecutor } from '../tools/tools.executor.js';
 import { ToolsRegistry } from '../tools/tools.registry.js';
+import { sanitizeAnswer } from './sanitize-answer.js';
 import type {
   SupportAgentHistoryMessage,
   SupportAgentTurnResult,
@@ -203,7 +204,10 @@ export class SupportAgentService {
           (completionTokens ?? 0) + (response.completionTokens ?? 0);
 
         if (response.toolCalls.length === 0) {
-          const answer = sanitizeAnswer(response.message.content);
+          const answer = sanitizeAnswer(
+            response.message.content,
+            input.content,
+          );
           // Clear live-data asks must never become “Want me to show it?” —
           // run the allowlisted lookup now when the model skipped tools.
           const forced =
@@ -273,6 +277,31 @@ export class SupportAgentService {
           }
 
           if (!answer) {
+            // Model only produced thinking / echo — never ship that.
+            // For light chat, answer with a short safe line instead of failing.
+            if (conversational) {
+              return {
+                ...base,
+                outcome: 'answered',
+                responseType: OrchestratorResponseType.Answered,
+                content:
+                  "I'm here — ask me anything about your Blivap account, donations, bookings, or wallet.",
+                reason: 'sanitized_empty_conversational',
+                context: {
+                  ...nextContext,
+                  conversationState: 'answered',
+                  pendingClarification: null,
+                },
+                knowledgeRefs: knowledgeRefs(chunks),
+                chunks,
+                toolCalls,
+                model,
+                promptTokens,
+                completionTokens,
+                retrievalDurationMs: retrieval.durationMs,
+                latencyMs: Date.now() - started,
+              };
+            }
             return {
               ...base,
               outcome: 'fallback',
@@ -684,39 +713,6 @@ function knowledgeRefs(
   return refs;
 }
 
-function sanitizeAnswer(value: string): string {
-  let cleaned = value
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<\/?think>/gi, '')
-    .replace(/\b(password|otp|access token)\s*[:=]\s*\S+/gi, '$1: [redacted]')
-    .trim();
-
-  // Drop leaked chain-of-thought when the model wrote planning instead of a reply.
-  if (looksLikeLeakedReasoning(cleaned)) {
-    cleaned = stripLeakedReasoning(cleaned);
-  }
-
-  return cleaned.slice(0, 4000);
-}
-
-function looksLikeLeakedReasoning(value: string): boolean {
-  return /\b(okay,? let'?s see|alright,? let'?s (see|go)|the (user|customer) (sent|said|asked)|i (should|need to) (check|reply|respond|call|see|acknowledge|inform)|i('ll| will) (reply|respond|make sure|assume)|let me (call|check|see|reply)|looking at the tools|available tools|there('s| is) a function|tools provided|no tools? (are |is )?needed|warm,? calm|plain language tone|knowledge notes|chain[- ]of[- ]thought|first,? i (should|need to)|invite them to ask|not explicitly listed)\b/i.test(
-    value,
-  );
-}
-
-function stripLeakedReasoning(value: string): string {
-  const parts = value
-    .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const kept = parts.filter((part) => !looksLikeLeakedReasoning(part));
-  if (kept.length > 0) return kept.join('\n\n').trim();
-
-  // Single-block leak with no separable reply — hide it entirely.
-  return '';
-}
-
 function isConversational(text: string): boolean {
   const trimmed = text.trim();
   if (/^(bliiva|blivap)[.!]?$/i.test(trimmed)) {
@@ -729,7 +725,7 @@ function isConversational(text: string): boolean {
   ) {
     return true;
   }
-  return /\b((what is|whats|who is) your name|who are you|what are you|what are you called|what can you do|what do you do|how can you help|are you (an?|and)?\s*(ai|bot|robot|assistant|llm)|are you (real|human|there|around)|is this (an? )?(ai|bot)|how are you|thanks|thank you|hello|hi)\b/i.test(
+  return /\b((what is|whats|who is) your name|who are you|what are you|what are you called|do you have a name|how can i address you|what should i call you|what can you do|what do you do|how can you help|are you (an?|and)?\s*(ai|bot|robot|assistant|llm)|are you (real|human|there|around)|is this (an? )?(ai|bot)|how are you|thanks|thank you|hello|hi)\b/i.test(
     text,
   );
 }
