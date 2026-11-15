@@ -42,6 +42,7 @@ Recommended layout:
 - Port `11434` is bound to the private interface. It is never exposed to the public internet or to the Next.js frontend.
 - Production `.env` sets `LLM_ENABLED=true`, a private `LLM_BASE_URL`, and restart policies on the inference host.
 - Keep `LLM_MODEL=qwen3:4b` (or larger) only when the inference box has enough RAM. Development can stay on `qwen3:1.7b`.
+- Deploy with `yarn docker:live` (or `docker compose -f docker-compose.prod.yml up -d` then `run --rm stack-check`). The oneshot `stack-check` service hits `GET /api/v1/health` and `GET /api/v1/health/llm` and fails the update if the boot LLM probe chat did not succeed. Local `yarn docker:up` runs the same check against Compose Ollama.
 
 Persistence and recovery:
 

@@ -6,6 +6,7 @@ import { RagModule } from '../rag/rag.module.js';
 import { ToolsModule } from '../tools/tools.module.js';
 import { LlmMetricsService } from './analytics/llm-metrics.service.js';
 import { LlmAdminController } from './llm.admin.controller.js';
+import { LlmStartupProbeService } from './llm-startup-probe.service.js';
 import { createLlmProvider } from './llm.factory.js';
 import { LLM_PROVIDER } from './llm.interface.js';
 import { LlmService } from './llm.service.js';
@@ -16,12 +17,19 @@ import { LlmService } from './llm.service.js';
   providers: [
     LlmMetricsService,
     LlmService,
+    LlmStartupProbeService,
     {
       provide: LLM_PROVIDER,
       useFactory: createLlmProvider,
       inject: [AiSettingsService],
     },
   ],
-  exports: [LlmService, LlmMetricsService, LLM_PROVIDER, AiModule],
+  exports: [
+    LlmService,
+    LlmMetricsService,
+    LlmStartupProbeService,
+    LLM_PROVIDER,
+    AiModule,
+  ],
 })
 export class LlmModule {}
