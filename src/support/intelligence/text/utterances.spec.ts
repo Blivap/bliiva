@@ -37,6 +37,17 @@ describe('detectUtterance greeting', () => {
     ).toBe(true);
   });
 
+  it.each([
+    'do you have a name',
+    'how can i address you',
+    'what should i call you',
+    'what can you do for me',
+  ])('treats %j as a bot identity ask', (raw) => {
+    const signals = detectUtterance(normalizeText(raw));
+    expect(signals.botIdentityAsk).toBe(true);
+    expect(signals.greeting).toBe(true);
+  });
+
   it('treats yes please as an affirmation', () => {
     const signals = detectUtterance(normalizeText('yes please'));
     expect(signals.affirmation).toBe(true);

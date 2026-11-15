@@ -42,9 +42,13 @@ export const envValidationSchema = Joi.object({
   INTELLIGENCE_CACHE_TTL_MS: Joi.number().min(1000).max(300000).default(15000),
   OBSERVE_APP_KEY: Joi.string().optional(),
   OBSERVE_APP_SECRET: Joi.string().optional(),
+  SEED_ON_START: Joi.string().valid('true', 'false').default('true'),
   LLM_ENABLED: Joi.string().valid('true', 'false').default('false'),
   LLM_PROVIDER: Joi.string().valid('ollama').default('ollama'),
-  LLM_BASE_URL: Joi.string().uri().default('http://127.0.0.1:11434'),
+  // Allow IPs and compose DNS (http://ollama:11434) — Joi.uri() rejects both otherwise.
+  LLM_BASE_URL: Joi.string()
+    .pattern(/^https?:\/\/.+/)
+    .default('http://127.0.0.1:11434'),
   LLM_MODEL: Joi.string().default('qwen3:1.7b'),
   LLM_ALTERNATIVE_MODEL: Joi.string().default('qwen3:4b'),
   LLM_TEMPERATURE: Joi.number().min(0).max(1).default(0.2),

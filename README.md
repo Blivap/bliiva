@@ -14,20 +14,41 @@ There is **no** OpenAI / Gemini / Claude dependency. Phase 2 is a deterministic 
 - Vitest + Supertest
 - NestJS Observe
 
-## Quick start
+## Quick start (Docker — recommended)
+
+Run from this app folder. Compose uses only local paths (`./.ollama`, `./data/mongo`, `./data/redis`) plus the image built from this repo:
 
 ```bash
-cp .env.example .env
-docker compose up -d mongo redis
+cp .env.example .env   # first time only
+yarn docker:up
+# same as: ./scripts/docker-up.sh
+# or:      docker compose up -d --build
+```
+
+- API: `http://localhost:3100/api/v1`
+- Health: `http://localhost:3100/api/v1/health`
+- Swagger: `http://localhost:3100/docs`
+
+| Path | Purpose |
+| --- | --- |
+| `./.ollama` | Qwen3 + embedding weights |
+| `./data/mongo` | MongoDB files |
+| `./data/redis` | Redis AOF |
+| `.env` | Local config (Compose overrides DB/LLM URLs for containers) |
+
+Keep host Homebrew Ollama stopped while Compose owns port `11434`.
+
+### Local yarn (API only)
+
+```bash
+docker compose up -d mongo redis ollama
 yarn install --ignore-engines
 yarn start:dev
 ```
 
-- API: `http://localhost:3000/api/v1`
-- Health: `http://localhost:3000/api/v1/health`
-- Swagger: `http://localhost:3000/docs`
+- API: `http://localhost:3000/api/v1` (or your `.env` `PORT`)
 
-Seed starter intents/knowledge (Mongo must be running):
+Optional manual seed (Compose / `SEED_ON_START=true` already seeds on boot):
 
 ```bash
 yarn seed:support

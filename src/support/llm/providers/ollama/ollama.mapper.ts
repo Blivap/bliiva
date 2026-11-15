@@ -51,11 +51,9 @@ export function fromOllamaMessage(message: OllamaChatMessage): {
   }));
   const content =
     typeof message.content === 'string' ? message.content.trim() : '';
-  const thinking =
-    typeof message.thinking === 'string' ? message.thinking.trim() : '';
+  // Never promote `thinking` into the user-visible reply — planning must stay private.
   return {
-    // Some thinking models leave content empty and put the reply in thinking.
-    content: content || thinking,
+    content,
     toolCalls: toolCalls.filter((call) => call.name),
   };
 }

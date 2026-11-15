@@ -33,20 +33,37 @@ describe('ollama mapper', () => {
     ).toThrow(LlmError);
   });
 
-  it('falls back to thinking when content is empty', () => {
-    const response = fromOllamaChatResponse(
+  it('never ships thinking as the user-visible reply', () => {
+    expect(() =>
+      fromOllamaChatResponse(
+        {
+          model: 'qwen3:1.7b',
+          message: {
+            role: 'assistant',
+            content: '',
+            thinking:
+              'Okay, let’s start by understanding what the customer is asking for.',
+          },
+        },
+        20,
+        'qwen3:1.7b',
+      ),
+    ).toThrow(LlmError);
+
+    const withBoth = fromOllamaChatResponse(
       {
         model: 'qwen3:1.7b',
         message: {
           role: 'assistant',
-          content: '',
-          thinking: 'Open Wallet in the app to check your balance.',
+          content: 'Your available balance is NGN 12.50.',
+          thinking: 'I should call get_wallet_summary then reply.',
         },
       },
       20,
       'qwen3:1.7b',
     );
-    expect(response.message.content).toContain('Wallet');
+    expect(withBoth.message.content).toBe('Your available balance is NGN 12.50.');
+    expect(withBoth.message.content.toLowerCase()).not.toContain('i should');
   });
 
   it('maps loading and unavailable errors', () => {

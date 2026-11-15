@@ -78,6 +78,7 @@ export default () => {
       appKey: process.env.OBSERVE_APP_KEY ?? 'YOUR_APP_KEY',
       appSecret: process.env.OBSERVE_APP_SECRET ?? 'YOUR_APP_SECRET',
     },
+    seedOnStart: process.env.SEED_ON_START !== 'false',
     llm: {
       enabled: process.env.LLM_ENABLED === 'true',
       provider: process.env.LLM_PROVIDER ?? 'ollama',

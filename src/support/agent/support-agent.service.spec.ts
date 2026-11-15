@@ -249,6 +249,75 @@ describe('SupportAgentService', () => {
       context: emptyContext(),
       history: [],
     });
+    expect(result.outcome).toBe('answered');
+    expect(result.reason).toBe('sanitized_empty_conversational');
+    expect(result.content.toLowerCase()).toContain('blivap');
+    expect(result.content.toLowerCase()).not.toContain('customer said');
+  });
+
+  it('never ships long planning text as the chat reply', async () => {
+    const leak = [
+      'Okay, let\'s start by understanding what the customer is asking for. They said, "anything at all just come up with something."',
+      'I\'ll generate a simple, warm reply. The final reply will be a short message.',
+      'Alright, let\'s start by understanding what the customer is asking for.',
+    ].join('\n\n');
+    const agent = harness({
+      retrieve: vi.fn(async () => ({
+        chunks: [],
+        durationMs: 1,
+        semanticAvailable: false,
+        embeddingMismatch: false,
+        missingEmbeddings: 0,
+        failed: false,
+      })),
+      chat: vi.fn(async () => ({
+        message: { role: 'assistant', content: leak },
+        toolCalls: [],
+        promptTokens: 8,
+        completionTokens: 40,
+        durationMs: 9,
+        model: 'qwen3:1.7b',
+      })),
+    });
+    const result = await agent.runTurn({
+      conversationId: '64b0000000000000000000bb',
+      content: 'anything at all just come up with something',
+      actor,
+      context: emptyContext(),
+      history: [],
+    });
+    expect(result.outcome).toBe('fallback');
+    expect(result.content).toBe('');
+    expect(result.content.toLowerCase()).not.toContain('understanding what');
+    expect(result.content.toLowerCase()).not.toContain('final reply');
+  });
+
+  it('never ships an echo of the user message', async () => {
+    const agent = harness({
+      retrieve: vi.fn(async () => ({
+        chunks: [],
+        durationMs: 1,
+        semanticAvailable: false,
+        embeddingMismatch: false,
+        missingEmbeddings: 0,
+        failed: false,
+      })),
+      chat: vi.fn(async () => ({
+        message: { role: 'assistant', content: 'That is a lie.' },
+        toolCalls: [],
+        promptTokens: 4,
+        completionTokens: 4,
+        durationMs: 5,
+        model: 'qwen3:1.7b',
+      })),
+    });
+    const result = await agent.runTurn({
+      conversationId: '64b0000000000000000000bb',
+      content: 'that is a lie',
+      actor,
+      context: emptyContext(),
+      history: [],
+    });
     expect(result.outcome).toBe('fallback');
     expect(result.reason).toBe('empty_model_answer');
   });

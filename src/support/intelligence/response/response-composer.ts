@@ -200,8 +200,8 @@ function handoff(reason: string, queued: boolean): string {
     case 'medical_emergency':
       return queued
         ? `${EMERGENCY_ADVICE} A specialist has been notified.`
-        : join([EMERGENCY_ADVICE, ESCALATION_OFFER_QUESTION]) ??
-            ESCALATION_OFFER_QUESTION;
+        : (join([EMERGENCY_ADVICE, ESCALATION_OFFER_QUESTION]) ??
+            ESCALATION_OFFER_QUESTION);
     default:
       return queuedText;
   }

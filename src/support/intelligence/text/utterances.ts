@@ -39,7 +39,7 @@ const NEGATION = /^(no|nope|nah)$/;
 const SELECTION =
   /^(that one|this one|the first one|the second one|the third one)$/;
 const BOT_IDENTITY =
-  /^(your name|name\??)$|\b((what is|whats|who is) your name|who are you|what are you\b(?! called)|what are you called|what can you do|what do you do|how can you help|what do you help with|are you (an?|and)?\s*(ai|bot|robot|assistant|llm)|are you (real|human)|is this (an? )?(ai|bot))\b/;
+  /^(your name|name\??)$|\b((what is|whats|who is) your name|who are you|what are you\b(?! called)|what are you called|do you have a name|how can i address you|what should i call you|how (?:should|do) i address you|what can you do(?: for me)?|what do you do|how can you help|what do you help with|are you (an?|and)?\s*(ai|bot|robot|assistant|llm)|are you (real|human)|is this (an? )?(ai|bot))\b/;
 
 const ORDINALS: Record<string, number> = {
   first: 0,

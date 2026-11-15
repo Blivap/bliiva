@@ -26,6 +26,9 @@
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "seed:support": "yarn build && node scripts/seed-support-data.ts",
+    "docker:up": "./scripts/docker-up.sh",
+    "docker:down": "docker compose --project-directory . -f docker-compose.yml down",
+    "docker:logs": "docker compose --project-directory . -f docker-compose.yml logs -f",
     "ci": "yarn lint && yarn format:check && yarn typecheck && yarn test:cov && yarn test:e2e && yarn build"
   },
   "dependencies": {
