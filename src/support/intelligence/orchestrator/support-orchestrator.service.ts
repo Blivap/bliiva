@@ -23,6 +23,7 @@ import { extractPendingActionParams } from '../../actions/pending-params.js';
 import { SupportAgentService } from '../../agent/support-agent.service.js';
 import type { SupportAgentTurnResult } from '../../agent/support-agent.types.js';
 import { AnalyticsService } from '../../analytics/analytics.service.js';
+import { buildTurnLog, asMetaString } from './turn-log.js';
 import { AuditRepository } from '../../audit/audit.repository.js';
 import { ConversationsRepository } from '../../conversations/conversations.repository.js';
 import { EscalationService } from '../../escalation/escalation.service.js';
@@ -151,11 +152,12 @@ export class SupportOrchestratorService {
     try {
       return await this.respond(conversation, content, actor, started);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
       this.logger.error(
         JSON.stringify({
           event: 'support.message.failed',
           conversationId: conversation.id,
-          message: error instanceof Error ? error.message : 'unknown',
+          message: errorMessage,
         }),
       );
       return this.finish(conversation, {
@@ -173,6 +175,11 @@ export class SupportOrchestratorService {
         userText: content,
         safetyRedact: false,
         lowScore: false,
+        extraMetadata: {
+          reason: 'unhandled_exception',
+          errorCode: error instanceof Error ? error.name : 'unknown',
+          errorMessage,
+        },
       });
     } finally {
       void userMessage;
@@ -458,7 +465,7 @@ export class SupportOrchestratorService {
         userText: content,
         safetyRedact: false,
         lowScore: false,
-        extraMetadata: { reason: 'ai_unavailable' },
+        extraMetadata: { source: 'llm', reason: 'ai_unavailable' },
       });
     }
     let decision = pendingEscalateAffirm
@@ -1107,6 +1114,7 @@ export class SupportOrchestratorService {
         safetyRedact: false,
         lowScore: false,
         extraMetadata: {
+          source: 'llm',
           reason: result.reason,
           errorCode: result.errorCode,
           model: result.model,
@@ -1510,6 +1518,12 @@ export class SupportOrchestratorService {
       suppressBotMessage?: boolean;
     },
   ): Promise<OrchestratorTurn> {
+    const source =
+      typeof input.extraMetadata?.source === 'string'
+        ? input.extraMetadata.source
+        : input.decision?.kind === SupportDecisionKind.RunAction
+          ? 'action'
+          : 'rules';
     const metadata: Record<string, unknown> = {
       responseType: input.responseType,
       reason: input.decision?.reason ?? 'temporary_error',
@@ -1524,7 +1538,23 @@ export class SupportOrchestratorService {
       ticketNumber: input.reference,
       ...(input.suppressBotMessage ? { silent: true } : {}),
       ...input.extraMetadata,
+      source,
     };
+    const latencyMs = Date.now() - input.started;
+    const turnLog = buildTurnLog({
+      conversationId: conversation.id,
+      userText: input.userText,
+      reply: input.content,
+      responseType: input.responseType,
+      reason: asMetaString(metadata.reason),
+      errorCode: asMetaString(metadata.errorCode),
+      errorMessage: asMetaString(metadata.errorMessage),
+      model: asMetaString(metadata.model),
+      source,
+      latencyMs,
+      safetyRedact: input.safetyRedact,
+    });
+    metadata.userExcerpt = turnLog.user;
     const bot = input.suppressBotMessage
       ? null
       : await this.messages.create({
@@ -1548,7 +1578,6 @@ export class SupportOrchestratorService {
       context: input.context as unknown as Record<string, unknown>,
       lastMessageAt: new Date(),
     });
-    const latencyMs = Date.now() - input.started;
     const decision = input.decision;
     try {
       await this.analytics.record({
@@ -1585,24 +1614,13 @@ export class SupportOrchestratorService {
       );
     }
 
-    const aiSource =
-      typeof input.extraMetadata?.source === 'string'
-        ? input.extraMetadata.source
-        : decision?.kind === SupportDecisionKind.RunAction
-          ? 'action'
-          : 'rules';
     this.logger.log(
       JSON.stringify({
-        event: 'support.message.processed',
-        conversationId: conversation.id,
-        outcome: input.responseType,
+        ...turnLog,
         intent: decision?.intent ?? null,
         category: input.category,
-        latencyMs,
         silent: Boolean(input.suppressBotMessage),
         aiActive: this.agent?.enabled() === true,
-        aiSource,
-        reason: decision?.reason ?? input.extraMetadata?.reason ?? null,
       }),
     );
 

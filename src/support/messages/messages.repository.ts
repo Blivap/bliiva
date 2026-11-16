@@ -44,4 +44,26 @@ export class MessagesRepository {
       this.model.countDocuments(filter).exec(),
     ]);
   }
+
+  findBotTurns(page: number, limit: number, errorsOnly: boolean) {
+    const filter: Record<string, unknown> = { senderType: 'bot' };
+    if (errorsOnly) {
+      filter.$or = [
+        { 'metadata.errorCode': { $type: 'string', $ne: '' } },
+        { 'metadata.errorMessage': { $type: 'string', $ne: '' } },
+        { 'metadata.responseType': 'TEMPORARY_ERROR' },
+      ];
+    }
+    const skip = (page - 1) * limit;
+    return Promise.all([
+      this.model
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.model.countDocuments(filter).exec(),
+    ]);
+  }
 }
