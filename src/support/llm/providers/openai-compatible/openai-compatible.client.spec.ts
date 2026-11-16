@@ -97,16 +97,17 @@ describe('OrderedChatProvider', () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ error: { message: 'down' } }, 503),
     ) as unknown as typeof fetch;
+    const ollamaChat = vi.fn(async () => ({
+      message: { role: 'assistant' as const, content: 'from ollama' },
+      toolCalls: [],
+      promptTokens: 1,
+      completionTokens: 1,
+      durationMs: 2,
+      model: 'qwen3:1.7b',
+    }));
     const ollama: LlmProvider = {
       name: 'ollama',
-      chat: vi.fn(async () => ({
-        message: { role: 'assistant' as const, content: 'from ollama' },
-        toolCalls: [],
-        promptTokens: 1,
-        completionTokens: 1,
-        durationMs: 2,
-        model: 'qwen3:1.7b',
-      })),
+      chat: ollamaChat,
       stream: async function* () {},
       health: async () => ({
         ok: true,
@@ -129,7 +130,7 @@ describe('OrderedChatProvider', () => {
     });
     expect(response.message.content).toBe('from ollama');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(ollama.chat).toHaveBeenCalledOnce();
+    expect(ollamaChat).toHaveBeenCalledOnce();
   });
 
   it('fails once when every provider fails', async () => {

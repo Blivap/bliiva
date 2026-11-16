@@ -203,10 +203,12 @@ describe('LlmService', () => {
         },
       ],
     });
-    const sent = chat.mock.calls[0]?.[0] as {
-      messages: Array<{ content: string }>;
-    };
-    expect(sent.messages[0]?.content).not.toContain('me@example.com');
-    expect(sent.messages[0]?.content).not.toContain('12345678901');
+    const sent = (
+      chat.mock.calls as unknown as Array<
+        [{ messages: Array<{ content: string }> }]
+      >
+    )[0]?.[0];
+    expect(sent?.messages[0]?.content).not.toContain('me@example.com');
+    expect(sent?.messages[0]?.content).not.toContain('12345678901');
   });
 });
