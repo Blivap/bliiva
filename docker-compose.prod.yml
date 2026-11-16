@@ -61,7 +61,10 @@ services:
         max-file: '5'
 
   # After API is healthy: require LLM boot probe (chat) to succeed before deploy is OK.
+  # Profile keeps this oneshot out of `docker compose up --wait`.
+  # Run via: yarn docker:live  or  docker compose -f docker-compose.prod.yml run --rm stack-check
   stack-check:
+    profiles: ['check']
     image: curlimages/curl:8.12.1
     restart: 'no'
     volumes:

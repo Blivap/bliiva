@@ -136,8 +136,10 @@ services:
       start_period: 40s
 
   # After API is up: require Mongo/Redis healthy AND LLM probe chat OK.
-  # `yarn docker:up` / compose update waits on this oneshot.
+  # Profile keeps this oneshot out of `docker compose up --wait` (exiting 0
+  # would otherwise fail --wait). Run via: docker compose run --rm stack-check
   stack-check:
+    profiles: ['check']
     image: curlimages/curl:8.12.1
     restart: 'no'
     volumes:

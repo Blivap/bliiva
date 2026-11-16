@@ -30,6 +30,6 @@ if ! curl -sf "http://127.0.0.1:${PORT_HOST}/api/v1/health" >/dev/null 2>&1; the
 fi
 
 echo "Running live stack-check (API + LLM probe via LLM_BASE_URL)…"
-"${COMPOSE[@]}" run --rm --no-deps stack-check
+"${COMPOSE[@]}" --profile check run --rm --no-deps stack-check
 
 echo "Live stack OK — API on :${PORT_HOST}, LLM verified"

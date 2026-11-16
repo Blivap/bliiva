@@ -42,6 +42,7 @@ echo "Running Compose stack-check (API + LLM probe)…"
 docker compose \
   --project-directory "$ROOT" \
   -f "$ROOT/docker-compose.yml" \
+  --profile check \
   run --rm --no-deps stack-check
 
 echo "Ready: http://127.0.0.1:3100/api/v1  (Swagger: http://127.0.0.1:3100/docs)"

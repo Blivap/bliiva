@@ -30,7 +30,7 @@
     "docker:down": "docker compose --project-directory . -f docker-compose.yml down",
     "docker:logs": "docker compose --project-directory . -f docker-compose.yml logs -f",
     "docker:live": "./scripts/docker-live.sh",
-    "docker:stack-check": "docker compose --project-directory . -f docker-compose.yml run --rm --no-deps stack-check",
+    "docker:stack-check": "docker compose --project-directory . -f docker-compose.yml --profile check run --rm --no-deps stack-check",
     "ci": "yarn lint && yarn format:check && yarn typecheck && yarn test:cov && yarn test:e2e && yarn build"
   },
   "dependencies": {
