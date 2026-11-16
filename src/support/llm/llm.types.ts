@@ -19,6 +19,7 @@ export interface LlmMessage {
   content: string;
   toolCalls?: LlmToolCall[];
   toolName?: string;
+  toolCallId?: string;
 }
 
 export interface LlmChatRequest {

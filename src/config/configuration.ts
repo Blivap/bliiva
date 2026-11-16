@@ -1,3 +1,5 @@
+import { readChatEndpoints } from './llm-endpoints.js';
+
 export default () => {
   const swaggerEnabled = process.env.SWAGGER_ENABLED !== 'false';
 
@@ -105,6 +107,7 @@ export default () => {
       keepAlive: process.env.LLM_KEEP_ALIVE ?? '5m',
       turnLimit: parseInt(process.env.LLM_TURN_LIMIT ?? '12', 10),
       turnWindowMs: parseInt(process.env.LLM_TURN_WINDOW_MS ?? '60000', 10),
+      chatEndpoints: readChatEndpoints(process.env),
     },
     embedding: {
       provider: process.env.EMBEDDING_PROVIDER ?? 'ollama',

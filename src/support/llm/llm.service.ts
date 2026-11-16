@@ -11,6 +11,7 @@ import {
   type LlmStreamChunk,
 } from './llm.types.js';
 import { Inject } from '@nestjs/common';
+import { redactChatRequest } from './redaction.js';
 
 @Injectable()
 export class LlmService {
@@ -25,13 +26,12 @@ export class LlmService {
   }
 
   async chat(request: LlmChatRequest): Promise<LlmChatResponse> {
-    this.assertFits(request);
+    const safe = redactChatRequest(request);
+    this.assertFits(safe);
     this.limiter.acquire();
     const started = Date.now();
     try {
-      const response = await this.withRetries(() =>
-        this.provider.chat(request),
-      );
+      const response = await this.withRetries(() => this.provider.chat(safe));
       this.logger.log(
         JSON.stringify({
           event: 'support.llm.chat',
@@ -58,10 +58,11 @@ export class LlmService {
   }
 
   async *stream(request: LlmChatRequest): AsyncIterable<LlmStreamChunk> {
-    this.assertFits(request);
+    const safe = redactChatRequest(request);
+    this.assertFits(safe);
     this.limiter.acquire();
     try {
-      yield* this.provider.stream(request);
+      yield* this.provider.stream(safe);
     } finally {
       this.limiter.release();
     }

@@ -1,29 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { ActionsRegistry } from '../../actions/actions.registry.js';
 import { buildToolPrompt } from './tool.prompt.js';
 
 describe('buildToolPrompt', () => {
-  it('lists every allowlisted Blivap action for reasoning', () => {
-    const actions = new ActionsRegistry().list();
-    const prompt = buildToolPrompt(actions);
-    expect(prompt).toContain('allowlisted action registry');
+  it('refers to the provided tools without naming them', () => {
+    const prompt = buildToolPrompt();
+    expect(prompt).toContain('the provided tools');
+    expect(prompt).toContain('At most three tools');
     for (const name of [
       'get_profile',
-      'get_account_status',
-      'get_identity_verification_status',
-      'resend_email_verification',
-      'get_donor_profile',
-      'get_donations',
-      'get_donation',
+      'get_wallet_summary',
       'cancel_booking',
       'get_blood_requests',
-      'get_blood_request',
-      'get_wallet_summary',
-      'get_notification_settings',
-      'list_notifications',
-      'update_notification_settings',
+      'submit_nin_verification',
     ]) {
-      expect(prompt).toContain(name);
+      expect(prompt).not.toContain(name);
     }
   });
 });

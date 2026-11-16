@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { OrchestratorResponseType } from '../../common/enums/index.js';
 import { ActionStatus } from '../actions/actions.types.js';
 import { emptyContext } from '../intelligence/context/conversation-context.js';
-import { LlmError } from '../llm/llm.types.js';
+import { LlmError, type LlmToolDefinition } from '../llm/llm.types.js';
+import { NO_RELIABLE_ANSWER } from '../llm/prompts/index.js';
 import { SupportAgentService } from './support-agent.service.js';
 
 import type { SupportActor } from '../../common/auth/support-actor.js';
@@ -19,6 +20,7 @@ function harness(overrides: {
   chat?: ReturnType<typeof vi.fn>;
   retrieve?: ReturnType<typeof vi.fn>;
   execute?: ReturnType<typeof vi.fn>;
+  toolList?: LlmToolDefinition[];
   catalogEntries?: Array<{
     id: string;
     title: string;
@@ -87,7 +89,7 @@ function harness(overrides: {
       })),
     clip: (value: string) => value,
   };
-  const tools = { list: () => [] };
+  const tools = { list: () => overrides.toolList ?? [] };
   const executor = {
     execute:
       overrides.execute ??
@@ -188,7 +190,8 @@ describe('SupportAgentService', () => {
     expect(result.context.pendingClarification).toBeNull();
   });
 
-  it('does not swap the model reply for a canned redirect', async () => {
+  it('skips the model when retrieval finds nothing relevant', async () => {
+    const chat = vi.fn();
     const agent = harness({
       retrieve: vi.fn(async () => ({
         chunks: [],
@@ -198,17 +201,7 @@ describe('SupportAgentService', () => {
         missingEmbeddings: 0,
         failed: false,
       })),
-      chat: vi.fn(async () => ({
-        message: {
-          role: 'assistant',
-          content: 'Ha, not sure — I’m here for Blivap help though. What’s up?',
-        },
-        toolCalls: [],
-        promptTokens: 8,
-        completionTokens: 12,
-        durationMs: 9,
-        model: 'qwen3:1.7b',
-      })),
+      chat,
     });
     const result = await agent.runTurn({
       conversationId: '64b0000000000000000000bb',
@@ -217,23 +210,14 @@ describe('SupportAgentService', () => {
       context: emptyContext(),
       history: [],
     });
+    expect(chat).not.toHaveBeenCalled();
     expect(result.outcome).toBe('answered');
-    expect(result.escalate).toBe(false);
-    expect(result.content).toBe(
-      'Ha, not sure — I’m here for Blivap help though. What’s up?',
-    );
+    expect(result.reason).toBe('no_relevant_knowledge');
+    expect(result.content).toBe(NO_RELIABLE_ANSWER);
   });
 
   it('falls back when the model only leaked reasoning', async () => {
     const agent = harness({
-      retrieve: vi.fn(async () => ({
-        chunks: [],
-        durationMs: 1,
-        semanticAvailable: false,
-        embeddingMismatch: false,
-        missingEmbeddings: 0,
-        failed: false,
-      })),
       chat: vi.fn(async () => ({
         message: {
           role: 'assistant',
@@ -267,14 +251,6 @@ describe('SupportAgentService', () => {
       "Alright, let's start by understanding what the customer is asking for.",
     ].join('\n\n');
     const agent = harness({
-      retrieve: vi.fn(async () => ({
-        chunks: [],
-        durationMs: 1,
-        semanticAvailable: false,
-        embeddingMismatch: false,
-        missingEmbeddings: 0,
-        failed: false,
-      })),
       chat: vi.fn(async () => ({
         message: { role: 'assistant', content: leak },
         toolCalls: [],
@@ -299,14 +275,6 @@ describe('SupportAgentService', () => {
 
   it('never ships an echo of the user message', async () => {
     const agent = harness({
-      retrieve: vi.fn(async () => ({
-        chunks: [],
-        durationMs: 1,
-        semanticAvailable: false,
-        embeddingMismatch: false,
-        missingEmbeddings: 0,
-        failed: false,
-      })),
       chat: vi.fn(async () => ({
         message: { role: 'assistant', content: 'That is a lie.' },
         toolCalls: [],
@@ -380,7 +348,10 @@ describe('SupportAgentService', () => {
     const chatCalls = chat.mock.calls as unknown as Array<
       [{ messages?: Array<{ content?: string }> }]
     >;
-    const systemNotes = String(chatCalls[0]?.[0]?.messages?.[2]?.content ?? '');
+    const systemNotes = (chatCalls[0]?.[0]?.messages ?? [])
+      .map((message) => String(message.content ?? ''))
+      .join('\n');
+    expect(systemNotes).toContain('KNOWLEDGE NOTES');
     expect(systemNotes).toContain('donor form');
   });
 
@@ -397,7 +368,9 @@ describe('SupportAgentService', () => {
       context: emptyContext(),
       history: [],
     });
-    expect(result.outcome).toBe('unavailable');
+    expect(result.outcome).toBe('answered');
+    expect(result.reason).toBe('llm_providers_failed');
+    expect(result.content).toBe(NO_RELIABLE_ANSWER);
   });
 
   it('runs a registered wallet tool then answers', async () => {
@@ -428,7 +401,12 @@ describe('SupportAgentService', () => {
       message: 'Available: NGN 12.50',
       data: { available: 12.5 },
     }));
-    const agent = harness({ chat, execute });
+    const walletTool: LlmToolDefinition = {
+      name: 'get_wallet_summary',
+      description: 'Wallet balance',
+      parameters: { type: 'object', properties: {}, required: [] },
+    };
+    const agent = harness({ chat, execute, toolList: [walletTool] });
     const result = await agent.runTurn({
       conversationId: '64b0000000000000000000bb',
       content: "What's my wallet balance?",
