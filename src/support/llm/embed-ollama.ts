@@ -7,8 +7,11 @@ export const OLLAMA_BIN = '/usr/bin/ollama';
 const DEAD_HOST = /bliiva-llm\.internal/i;
 /** Smallest instance that can keep Node and Qwen3 1.7B resident. */
 const MIN_BYTES = 3_000_000_000;
-/** Qwen3 4B needs a larger instance; smaller boxes use 1.7B. */
-const FOUR_B_BYTES = 6_000_000_000;
+/**
+ * In-process inference always uses 1.7B. Loading qwen3:4b beside the API
+ * exhausts the instance and Render returns 502 for every request.
+ */
+const EMBEDDED_MODEL = 'qwen3:1.7b';
 
 export type EmbeddedOllamaPlan =
   | { start: false; reason: 'external-host' | 'binary-missing' | 'low-memory' }
@@ -35,9 +38,7 @@ export function embeddedOllamaPlan(input: {
   if (input.totalBytes < MIN_BYTES) {
     return { start: false, reason: 'low-memory' };
   }
-  const requested = input.model?.trim() || 'qwen3:4b';
-  const model = input.totalBytes < FOUR_B_BYTES ? 'qwen3:1.7b' : requested;
-  return { start: true, model, baseUrl: 'http://127.0.0.1:11434' };
+  return { start: true, model: EMBEDDED_MODEL, baseUrl: 'http://127.0.0.1:11434' };
 }
 
 export function prepareEmbeddedOllama(input: {
@@ -66,6 +67,7 @@ export function prepareEmbeddedOllama(input: {
     ...process.env,
     HOME: process.env.HOME || '/home/node',
     LD_LIBRARY_PATH: '/usr/lib/ollama',
+    OLLAMA_CONTEXT_LENGTH: process.env.LLM_NUM_CTX ?? '2048',
     OLLAMA_HOST: '127.0.0.1:11434',
     OLLAMA_KEEP_ALIVE: process.env.LLM_KEEP_ALIVE ?? '30m',
     OLLAMA_MAX_LOADED_MODELS: '1',
