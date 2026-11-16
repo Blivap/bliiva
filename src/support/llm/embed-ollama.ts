@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { Logger } from '@nestjs/common';
 
 /** Installed by the API image from the official Ollama image. */
-export const OLLAMA_BIN = '/usr/local/bin/ollama';
+export const OLLAMA_BIN = '/usr/bin/ollama';
 
 const DEAD_HOST = /bliiva-llm\.internal/i;
 /** Smallest instance that can keep Node and Qwen3 1.7B resident. */
