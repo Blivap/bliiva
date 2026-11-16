@@ -69,7 +69,7 @@ export class SupportAgentService {
     const base = emptyResult(input.context, started);
 
     if (!llm.enabled) {
-      return { ...base, outcome: 'fallback', reason: 'llm_disabled' };
+      return { ...base, outcome: 'unavailable', reason: 'llm_disabled' };
     }
 
     const redactedUser = redactForPrompt(input.content);
@@ -80,7 +80,7 @@ export class SupportAgentService {
         escalate: false,
         escalationReason: 'prompt_injection',
         responseType: OrchestratorResponseType.ClarificationRequired,
-        content: `I can’t do that. ${ESCALATION_OFFER_QUESTION}`,
+        content: `I can’t do that. Please email support@blivap.com if you need a human specialist.`,
         reason: 'prompt_injection',
         context: offerEscalationContext(input.context, 'prompt_injection'),
         latencyMs: Date.now() - started,
@@ -276,41 +276,21 @@ export class SupportAgentService {
           }
 
           if (!answer) {
-            // Model only produced thinking / echo — never ship that.
-            // For light chat, answer with a short safe line instead of failing.
-            if (conversational) {
-              return {
-                ...base,
-                outcome: 'answered',
-                responseType: OrchestratorResponseType.Answered,
-                content:
-                  "I'm here — ask me anything about your Blivap account, donations, bookings, or wallet.",
-                reason: 'sanitized_empty_conversational',
-                context: {
-                  ...nextContext,
-                  conversationState: 'answered',
-                  pendingClarification: null,
-                },
-                knowledgeRefs: knowledgeRefs(chunks),
-                chunks,
-                toolCalls,
-                model,
-                promptTokens,
-                completionTokens,
-                retrievalDurationMs: retrieval.durationMs,
-                latencyMs: Date.now() - started,
-              };
-            }
+            // Model only produced thinking / echo — never ship canned filler.
+            // Orchestrator surfaces the support@blivap.com unavailable message.
             return {
               ...base,
-              outcome: 'fallback',
-              reason: 'empty_model_answer',
+              outcome: 'unavailable',
+              reason: conversational
+                ? 'sanitized_empty_conversational'
+                : 'empty_model_answer',
               model,
               promptTokens,
               completionTokens,
               retrievalDurationMs: retrieval.durationMs,
               knowledgeRefs: knowledgeRefs(chunks),
               chunks,
+              toolCalls,
               latencyMs: Date.now() - started,
               errorCode: 'empty_response',
             };

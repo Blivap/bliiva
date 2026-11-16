@@ -56,7 +56,7 @@ describe('composeResponse fallback', () => {
       confidence: 0,
     };
     const result = composeResponse(decision);
-    expect(result.content).toContain('Try again shortly');
+    expect(result.content.toLowerCase()).toContain('support@blivap.com');
     expect(result.content.toLowerCase()).not.toContain('specialist');
   });
 });

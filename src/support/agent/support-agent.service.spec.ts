@@ -254,9 +254,9 @@ describe('SupportAgentService', () => {
       context: emptyContext(),
       history: [],
     });
-    expect(result.outcome).toBe('answered');
+    expect(result.outcome).toBe('unavailable');
     expect(result.reason).toBe('sanitized_empty_conversational');
-    expect(result.content.toLowerCase()).toContain('blivap');
+    expect(result.content).toBe('');
     expect(result.content.toLowerCase()).not.toContain('customer said');
   });
 
@@ -291,7 +291,7 @@ describe('SupportAgentService', () => {
       context: emptyContext(),
       history: [],
     });
-    expect(result.outcome).toBe('fallback');
+    expect(result.outcome).toBe('unavailable');
     expect(result.content).toBe('');
     expect(result.content.toLowerCase()).not.toContain('understanding what');
     expect(result.content.toLowerCase()).not.toContain('final reply');
@@ -323,7 +323,7 @@ describe('SupportAgentService', () => {
       context: emptyContext(),
       history: [],
     });
-    expect(result.outcome).toBe('fallback');
+    expect(result.outcome).toBe('unavailable');
     expect(result.reason).toBe('empty_model_answer');
   });
 
