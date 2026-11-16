@@ -1,5 +1,13 @@
 import { readChatEndpoints } from './llm-endpoints.js';
 
+/** Render injects `host:port` with no scheme. Ollama fetch needs a full URL. */
+function llmBaseUrl(value: string | undefined): string {
+  const trimmed = value?.trim().replace(/\/$/, '') ?? '';
+  if (!trimmed) return 'http://127.0.0.1:11434';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `http://${trimmed}`;
+}
+
 export default () => {
   const swaggerEnabled = process.env.SWAGGER_ENABLED !== 'false';
 
@@ -86,7 +94,7 @@ export default () => {
     llm: {
       enabled: process.env.LLM_ENABLED === 'true',
       provider: process.env.LLM_PROVIDER ?? 'ollama',
-      baseUrl: process.env.LLM_BASE_URL ?? 'http://127.0.0.1:11434',
+      baseUrl: llmBaseUrl(process.env.LLM_BASE_URL),
       model: process.env.LLM_MODEL ?? 'qwen3:1.7b',
       alternativeModel: process.env.LLM_ALTERNATIVE_MODEL ?? 'qwen3:4b',
       temperature: parseFloat(process.env.LLM_TEMPERATURE ?? '0.2'),

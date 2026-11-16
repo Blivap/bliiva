@@ -61,9 +61,9 @@ export const envValidationSchema = Joi.object({
   SEED_ON_START: Joi.string().valid('true', 'false').default('true'),
   LLM_ENABLED: Joi.string().valid('true', 'false').default('false'),
   LLM_PROVIDER: Joi.string().valid('ollama').default('ollama'),
-  // Allow IPs and compose DNS (http://ollama:11434) — Joi.uri() rejects both otherwise.
+  // Allow IPs, compose DNS, and Render host:port (scheme added in configuration).
   LLM_BASE_URL: Joi.string()
-    .pattern(/^https?:\/\/.+/)
+    .pattern(/^(https?:\/\/)?.+/)
     .default('http://127.0.0.1:11434'),
   LLM_MODEL: Joi.string().default('qwen3:1.7b'),
   LLM_ALTERNATIVE_MODEL: Joi.string().default('qwen3:4b'),

@@ -220,7 +220,7 @@ jobs:
     needs: publish
     if: needs.publish.result == 'success' && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.deploy))
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: production
     concurrency:
       group: bliiva-production
@@ -283,7 +283,7 @@ jobs:
           printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
           cd /opt/bliiva
           BLIIVA_IMAGE="$IMAGE" docker compose -f docker-compose.prod.yml pull api
-          BLIIVA_IMAGE="$IMAGE" docker compose -f docker-compose.prod.yml up -d --wait --wait-timeout 180 --remove-orphans
+          BLIIVA_IMAGE="$IMAGE" docker compose -f docker-compose.prod.yml up -d --wait --wait-timeout 600 --remove-orphans
           docker logout ghcr.io
           docker image prune -f
           REMOTE

@@ -27,7 +27,7 @@ done
 
 if ! curl -sf "http://127.0.0.1:${PORT_HOST}/api/v1/health" >/dev/null 2>&1; then
   echo "Live API did not become healthy. Recent logs:"
-  "${COMPOSE[@]}" logs --tail=80 api
+  "${COMPOSE[@]}" logs --tail=80 api ollama ollama-warm
   exit 1
 fi
 

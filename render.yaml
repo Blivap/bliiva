@@ -1,0 +1,45 @@
+# Live Render stack. Ollama is a private service on the same network as the API,
+# the same role as the Compose service named `ollama`. It has no public URL.
+#
+# Sync this Blueprint from the Render Dashboard. Before the first sync, set
+# `region` on bliiva-ollama to the API service's region if that is not Oregon.
+# Region cannot be changed after the service is created.
+services:
+  - type: web
+    name: bliiva
+    runtime: docker
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: LLM_ENABLED
+        value: "true"
+      - key: LLM_PROVIDER
+        value: ollama
+      - key: LLM_MODEL
+        value: qwen3:4b
+      - key: LLM_BASE_URL
+        fromService:
+          name: bliiva-ollama
+          type: pserv
+          property: hostport
+
+  - type: pserv
+    name: bliiva-ollama
+    runtime: docker
+    dockerfilePath: ./Dockerfile.ollama
+    # qwen3:4b needs the weights resident. 4 GB instances get OOM-killed.
+    plan: 2c-8g
+    envVars:
+      - key: LLM_MODEL
+        value: qwen3:4b
+      - key: EMBEDDING_MODEL
+        value: nomic-embed-text
+      - key: OLLAMA_KEEP_ALIVE
+        value: 30m
+      - key: OLLAMA_MAX_LOADED_MODELS
+        value: "1"
+      - key: OLLAMA_NUM_PARALLEL
+        value: "1"
+    disk:
+      name: ollama
+      mountPath: /root/.ollama
+      sizeGB: 10

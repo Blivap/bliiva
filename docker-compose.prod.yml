@@ -1,6 +1,7 @@
-# Live / production API only.
+# Live / production stack.
 # MongoDB and Redis come from connection strings in .env — not Compose services.
-# LLM runs on a private inference host (LLM_BASE_URL). stack-check verifies it.
+# Ollama runs beside the API on this Compose network, same as docker-compose.yml.
+# The API always uses http://ollama:11434. Port 11434 is not published.
 #
 # Required in .env:
 #   MONGODB_URI=mongodb+srv://...   (or mongodb://user:pass@host:27017/bliiva_support)
@@ -8,7 +9,6 @@
 #   SUPPORT_SERVICE_API_KEY=...
 #   BLIIVA_IMAGE=ghcr.io/...
 #   LLM_ENABLED=true
-#   LLM_BASE_URL=http://bliiva-llm.internal:11434
 #
 # Usage:
 #   yarn docker:live
@@ -17,6 +17,40 @@
 name: bliiva-live
 
 services:
+  # Same role as local Compose `ollama`: reachable only on this network.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - bliiva_ollama:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: ${LLM_KEEP_ALIVE:-30m}
+      OLLAMA_MAX_LOADED_MODELS: 1
+      OLLAMA_NUM_PARALLEL: 1
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  ollama-warm:
+    image: curlimages/curl:8.12.1
+    restart: 'no'
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-qwen3:4b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+    entrypoint:
+      [
+        '/bin/sh',
+        '-c',
+        'set -e; echo "warming $$LLM_MODEL"; curl -sf "$$OLLAMA_HOST/api/tags" >/dev/null; curl -sf "$$OLLAMA_HOST/api/pull" -d "{\"name\":\"$$LLM_MODEL\"}"; curl -sf "$$OLLAMA_HOST/api/pull" -d "{\"name\":\"$$EMBEDDING_MODEL\"}"; curl -sf "$$OLLAMA_HOST/api/chat" -d "{\"model\":\"$$LLM_MODEL\",\"stream\":false,\"think\":false,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"options\":{\"num_predict\":16}}"; echo warm-ok',
+      ]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
   api:
     image: ${BLIIVA_IMAGE:?Set BLIIVA_IMAGE to the published ghcr.io image}
     restart: unless-stopped
@@ -36,9 +70,9 @@ services:
       REDIS_HOST: ''
       REDIS_PORT: ''
       REDIS_PASSWORD: ''
-      # Live must use the private Ollama host — fail stack-check if unset/disabled.
+      # In-compose Ollama only. Overrides any LLM_BASE_URL in .env.
       LLM_ENABLED: ${LLM_ENABLED:-true}
-      LLM_BASE_URL: ${LLM_BASE_URL:?Set LLM_BASE_URL to the private Ollama URL}
+      LLM_BASE_URL: http://ollama:11434
       LLM_MODEL: ${LLM_MODEL:-qwen3:4b}
     security_opt:
       - no-new-privileges:true
@@ -59,6 +93,11 @@ services:
       options:
         max-size: '10m'
         max-file: '5'
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-warm:
+        condition: service_completed_successfully
 
   # After API is healthy: require LLM boot probe (chat) to succeed before deploy is OK.
   # Profile keeps this oneshot out of `docker compose up --wait`.
@@ -77,3 +116,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  bliiva_ollama:
