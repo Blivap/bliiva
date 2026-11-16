@@ -228,8 +228,15 @@ function offerHandoff(reason: string): string {
   }
 }
 
+/** Shown when the AI model is down, busy, disabled, or otherwise unavailable. */
+export const AI_UNAVAILABLE_SUPPORT_EMAIL = 'support@blivap.com';
+
 export function temporaryErrorMessage(): string {
-  return 'Couldn’t process that. Try again shortly.';
+  return `Our AI support assistant is temporarily unavailable. Please email ${AI_UNAVAILABLE_SUPPORT_EMAIL} and our team will help you.`;
+}
+
+export function aiUnavailableMessage(): string {
+  return temporaryErrorMessage();
 }
 
 function unsupportedActionMessage(reason: string | null | undefined): string {

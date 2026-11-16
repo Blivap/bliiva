@@ -57,6 +57,7 @@ import {
 import { IntentCatalogService } from '../recognition/intent-catalog.service.js';
 import { RuleBasedRecognizerService } from '../recognition/rule-based-recognizer.service.js';
 import {
+  aiUnavailableMessage,
   composeResponse,
   ESCALATION_OFFER_QUESTION,
   temporaryErrorMessage,
@@ -398,8 +399,8 @@ export class SupportOrchestratorService {
       unsupportedActionReason,
     });
 
-    // Keep operational/safety turns instant. Chatty turns (greet, close,
-    // unclear, off-topic) go to the LLM so it can speak in its own words.
+    // Operational/safety turns stay on the rules path. All other chat must
+    // come from the AI when LLM_ENABLED=true — no canned greet/identity/KB copy.
     const locked =
       baseDecision.kind === SupportDecisionKind.Emergency ||
       baseDecision.kind === SupportDecisionKind.Escalate ||
@@ -408,7 +409,6 @@ export class SupportOrchestratorService {
       baseDecision.kind === SupportDecisionKind.ClosedConversation ||
       baseDecision.kind === SupportDecisionKind.UnsupportedAction ||
       baseDecision.kind === SupportDecisionKind.Authenticate ||
-      baseDecision.kind === SupportDecisionKind.Answer ||
       baseDecision.kind === SupportDecisionKind.RunAction;
     const pendingActionFlow =
       pendingConfirm ||
@@ -417,33 +417,13 @@ export class SupportOrchestratorService {
       pendingEscalateAffirm ||
       pendingEscalateReject ||
       pendingOfferAffirm;
-    // Soft acks / bare yes with nothing pending must not reopen tasks or hit the LLM.
-    const softAckIdle =
-      !humanHandling &&
-      !closed &&
-      (utterance.softAck || utterance.affirmation) &&
-      pending.type === 'none' &&
-      !context.pendingClarification;
-    const identityAsk =
-      !humanHandling &&
-      !closed &&
-      utterance.botIdentityAsk &&
-      pending.type === 'none' &&
-      !resolvedActionName;
-    const smallTalkOffTopic =
-      !humanHandling &&
-      !closed &&
-      utterance.smallTalkOffTopic &&
-      pending.type === 'none' &&
-      !resolvedActionName &&
-      !recognition.intent;
+    const aiRequired = Boolean(this.agent?.enabled());
     if (
+      aiRequired &&
       !locked &&
       !pendingActionFlow &&
-      !softAckIdle &&
-      !identityAsk &&
-      !smallTalkOffTopic &&
-      this.agent?.enabled() &&
+      !humanHandling &&
+      !closed &&
       pending.type === 'none'
     ) {
       const agentTurn = await this.tryAgent(
@@ -456,6 +436,30 @@ export class SupportOrchestratorService {
         recognition.intent,
       );
       if (agentTurn) return agentTurn;
+      this.logger.warn(
+        JSON.stringify({
+          event: 'support.ai.unavailable',
+          conversationId: conversation.id,
+          reason: 'agent_no_answer',
+        }),
+      );
+      return this.finish(conversation, {
+        responseType: OrchestratorResponseType.TemporaryError,
+        content: aiUnavailableMessage(),
+        reference: null,
+        decision: null,
+        recognition: null,
+        context,
+        status: conversation.status,
+        category: conversation.category,
+        priority: conversation.priority,
+        assignedAgentId: conversation.assignedAgentId,
+        started: Date.now(),
+        userText: content,
+        safetyRedact: false,
+        lowScore: false,
+        extraMetadata: { reason: 'ai_unavailable' },
+      });
     }
     let decision = pendingEscalateAffirm
       ? {
@@ -556,8 +560,18 @@ export class SupportOrchestratorService {
     let ticketQueued = false;
     let assignedAgentId = conversation.assignedAgentId;
     let status = conversation.status;
+
+    // Rules-only soft ack (LLM off): clear sticky intent without reopening topics.
+    // When LLM is on, soft acks are answered by the model above.
+    const softAckIdle =
+      !aiRequired &&
+      !humanHandling &&
+      !closed &&
+      (utterance.softAck || utterance.affirmation) &&
+      pending.type === 'none' &&
+      !context.pendingClarification;
     if (
-      (softAckIdle || identityAsk || smallTalkOffTopic) &&
+      softAckIdle &&
       decision.kind !== SupportDecisionKind.HumanHandling &&
       decision.kind !== SupportDecisionKind.Escalate &&
       decision.kind !== SupportDecisionKind.Emergency &&
@@ -569,11 +583,7 @@ export class SupportOrchestratorService {
         ...baseDecision,
         kind: SupportDecisionKind.Answer,
         responseType: OrchestratorResponseType.Answered,
-        reason: identityAsk
-          ? 'bot_identity'
-          : smallTalkOffTopic
-            ? 'small_talk_off_topic'
-            : 'soft_ack',
+        reason: 'soft_ack',
         knowledge: null,
         clarificationOptions: [],
         escalationReason: null,
@@ -595,11 +605,7 @@ export class SupportOrchestratorService {
             ? 'Sure — what else can I help you with on Blivap?'
             : decision.reason === 'soft_ack'
               ? 'Alright — I’m here if you need anything on Blivap.'
-              : decision.reason === 'bot_identity'
-                ? "I'm Bliiva — Blivap’s official AI support assistant. I can help with your Blivap account, donations, bookings, wallet, notifications, and more."
-                : decision.reason === 'small_talk_off_topic'
-                  ? 'I’m here for Blivap support — accounts, donations, bookings, and wallet. What do you need help with?'
-                  : null;
+              : null;
     let nextContextOverride: ConversationContextState | null = null;
 
     if (
@@ -1071,18 +1077,23 @@ export class SupportOrchestratorService {
       confirmationId: context.pendingConfirmationId ?? undefined,
     });
     await this.recordLlmAnalytics(conversation.id, result);
-    if (result.outcome === 'fallback') {
-      return null;
-    }
-    // Timeouts / Ollama reloads used to disappear into "Couldn't match that".
-    // Surface a temporary error so the user can retry once the model is warm.
     if (
+      result.outcome === 'fallback' ||
       result.outcome === 'unavailable' ||
       result.outcome === 'temporary_error'
     ) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'support.ai.unavailable',
+          conversationId: conversation.id,
+          outcome: result.outcome,
+          reason: result.reason,
+          errorCode: result.errorCode,
+        }),
+      );
       return this.finish(conversation, {
         responseType: OrchestratorResponseType.TemporaryError,
-        content: temporaryErrorMessage(),
+        content: aiUnavailableMessage(),
         reference: null,
         decision: null,
         recognition: null,

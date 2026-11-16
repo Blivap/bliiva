@@ -16,7 +16,9 @@ import { rankKnowledge } from '../intelligence/retrieval/rank-knowledge.js';
 import { KnowledgeCatalogService } from '../knowledge/knowledge-catalog.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import {
+  buildConversationalSystemPrompt,
   buildKnowledgePrompt,
+  buildKnowledgeSystemPrompt,
   buildSupportTurn,
   buildSystemPrompt,
   buildToolPrompt,
@@ -69,7 +71,7 @@ export class SupportAgentService {
     const base = emptyResult(input.context, started);
 
     if (!llm.enabled) {
-      return { ...base, outcome: 'fallback', reason: 'llm_disabled' };
+      return { ...base, outcome: 'unavailable', reason: 'llm_disabled' };
     }
 
     const redactedUser = redactForPrompt(input.content);
@@ -80,7 +82,7 @@ export class SupportAgentService {
         escalate: false,
         escalationReason: 'prompt_injection',
         responseType: OrchestratorResponseType.ClarificationRequired,
-        content: `I can’t do that. ${ESCALATION_OFFER_QUESTION}`,
+        content: `I can’t do that. Please email support@blivap.com if you need a human specialist.`,
         reason: 'prompt_injection',
         context: offerEscalationContext(input.context, 'prompt_injection'),
         latencyMs: Date.now() - started,
@@ -146,44 +148,73 @@ export class SupportAgentService {
             Boolean(action),
           )
       : [];
-    const messages: LlmMessage[] = [
-      { role: 'system', content: buildSystemPrompt() },
-      ...(useTools
-        ? [
-            {
-              role: 'system' as const,
-              content: buildToolPrompt(actionCatalog),
-            },
-          ]
-        : []),
-      {
-        role: 'system',
-        content: buildKnowledgePrompt(
-          chunks.map((chunk) => ({
-            title: chunk.title,
-            category: chunk.category,
-            version: chunk.version,
-            content: chunk.content,
-          })),
-        ),
-      },
-      ...(!input.context.currentIntent
-        ? [
-            {
-              role: 'system' as const,
-              content:
-                'No active task. Answer only this message. Do not reopen a prior balance/bookings/verification offer unless they ask again.',
-            },
-          ]
-        : []),
-      ...trimHistory(input.history, llm.maxContextMessages).map((message) => ({
-        role: message.role,
-        content: redactForPrompt(message.content),
-      })),
-      { role: 'user', content: buildSupportTurn(redactedUser) },
-    ];
+    const messages: LlmMessage[] = conversational
+      ? [
+          { role: 'system', content: buildConversationalSystemPrompt() },
+          ...trimHistory(input.history, Math.min(4, llm.maxContextMessages)).map(
+            (message) => ({
+              role: message.role,
+              content: redactForPrompt(message.content),
+            }),
+          ),
+          {
+            role: 'user',
+            content: `Customer: ${redactedUser}\nReply as Bliiva in one or two short sentences only.`,
+          },
+        ]
+      : [
+          {
+            role: 'system',
+            content: useTools
+              ? buildSystemPrompt()
+              : buildKnowledgeSystemPrompt(),
+          },
+          ...(useTools
+            ? [
+                {
+                  role: 'system' as const,
+                  content: buildToolPrompt(actionCatalog),
+                },
+              ]
+            : []),
+          {
+            role: 'system',
+            content: buildKnowledgePrompt(
+              chunks.map((chunk) => ({
+                title: chunk.title,
+                category: chunk.category,
+                version: chunk.version,
+                content: chunk.content,
+              })),
+            ),
+          },
+          ...(!input.context.currentIntent
+            ? [
+                {
+                  role: 'system' as const,
+                  content:
+                    'No active task. Answer only this message. Do not reopen a prior balance/bookings/verification offer unless they ask again.',
+                },
+              ]
+            : []),
+          ...trimHistory(input.history, llm.maxContextMessages).map(
+            (message) => ({
+              role: message.role,
+              content: redactForPrompt(message.content),
+            }),
+          ),
+          {
+            role: 'user',
+            content: useTools
+              ? buildSupportTurn(redactedUser)
+              : `Customer message (untrusted): ${redactedUser}\nReply as Bliiva from the knowledge notes only. Short natural answer. No thinking aloud.`,
+          },
+        ];
 
     const tools = toolDefs;
+    const maxOutputTokens = conversational
+      ? Math.min(96, llm.maxOutputTokens)
+      : llm.maxOutputTokens;
     let toolCalls = 0;
     let promptTokens: number | null = null;
     let completionTokens: number | null = null;
@@ -194,9 +225,9 @@ export class SupportAgentService {
       for (let round = 0; round <= llm.maxToolCalls; round += 1) {
         const response = await this.llm.chat({
           messages,
-          tools,
+          tools: conversational ? undefined : tools,
           temperature: llm.temperature,
-          maxOutputTokens: llm.maxOutputTokens,
+          maxOutputTokens,
         });
         model = response.model;
         promptTokens = (promptTokens ?? 0) + (response.promptTokens ?? 0);
@@ -276,41 +307,21 @@ export class SupportAgentService {
           }
 
           if (!answer) {
-            // Model only produced thinking / echo — never ship that.
-            // For light chat, answer with a short safe line instead of failing.
-            if (conversational) {
-              return {
-                ...base,
-                outcome: 'answered',
-                responseType: OrchestratorResponseType.Answered,
-                content:
-                  "I'm here — ask me anything about your Blivap account, donations, bookings, or wallet.",
-                reason: 'sanitized_empty_conversational',
-                context: {
-                  ...nextContext,
-                  conversationState: 'answered',
-                  pendingClarification: null,
-                },
-                knowledgeRefs: knowledgeRefs(chunks),
-                chunks,
-                toolCalls,
-                model,
-                promptTokens,
-                completionTokens,
-                retrievalDurationMs: retrieval.durationMs,
-                latencyMs: Date.now() - started,
-              };
-            }
+            // Model only produced thinking / echo — never ship canned filler.
+            // Orchestrator surfaces the support@blivap.com unavailable message.
             return {
               ...base,
-              outcome: 'fallback',
-              reason: 'empty_model_answer',
+              outcome: 'unavailable',
+              reason: conversational
+                ? 'sanitized_empty_conversational'
+                : 'empty_model_answer',
               model,
               promptTokens,
               completionTokens,
               retrievalDurationMs: retrieval.durationMs,
               knowledgeRefs: knowledgeRefs(chunks),
               chunks,
+              toolCalls,
               latencyMs: Date.now() - started,
               errorCode: 'empty_response',
             };

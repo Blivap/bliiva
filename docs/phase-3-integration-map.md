@@ -73,11 +73,13 @@ Seeded Q&A lives in `src/support/intelligence/dataset/blivap-support.dataset.ts`
 
 ## Decision path
 
-Safety / emergency / human request → Phase 2 decision engine (always).  
-When `LLM_ENABLED=true` → Ollama agent with RAG + allowlisted tools.  
-LLM unavailable / ungrounded / disabled → Phase 2 knowledge + action resolver.  
+Safety / emergency / human request / confirmed actions → Phase 2 decision engine.  
+When `LLM_ENABLED=true` → **all other chat replies come from the Ollama agent** (no canned greet/identity/KB copy).  
+LLM unavailable / busy / empty / disabled mid-turn → tell the user to email `support@blivap.com` (do not invent a rules reply).  
 Sensitive / unsupported mutation → escalate.  
 Confirmation-bound mutation → Redis confirmation ticket, then execute once.  
+
+Blivap backend must send `x-support-api-key` matching `SUPPORT_SERVICE_API_KEY`, and production must set `LLM_ENABLED=true` with a reachable `LLM_BASE_URL`.  
 OTP/reference follow-ups after top-up/payout start → `action_resource` free-text param collection (secrets redacted in prompts/audit).
 
 Model setup and deployment: [`phase-3-llm.md`](phase-3-llm.md).
