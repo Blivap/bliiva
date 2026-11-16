@@ -45,4 +45,16 @@ docker compose \
   --profile check \
   run --rm --no-deps stack-check
 
+echo "Running AI chat smoke (real prompts)…"
+if [ -f "$ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
+fi
+BASE_URL="${BASE_URL:-http://127.0.0.1:3100/api/v1}" \
+  SMOKE_PROFILE="${SMOKE_PROFILE:-full}" \
+  "$ROOT/scripts/smoke-ai-chat.sh"
+
 echo "Ready: http://127.0.0.1:3100/api/v1  (Swagger: http://127.0.0.1:3100/docs)"
+

@@ -31,6 +31,7 @@
     "docker:logs": "docker compose --project-directory . -f docker-compose.yml logs -f",
     "docker:live": "./scripts/docker-live.sh",
     "docker:stack-check": "docker compose --project-directory . -f docker-compose.yml --profile check run --rm --no-deps stack-check",
+    "docker:smoke-ai": "./scripts/smoke-ai-chat.sh",
     "ci": "yarn lint && yarn format:check && yarn typecheck && yarn test:cov && yarn test:e2e && yarn build"
   },
   "dependencies": {

@@ -75,7 +75,8 @@ jobs:
     name: Image build and smoke test
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # Ollama pull + warm + AI chat smoke needs headroom on cold runners.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -127,11 +128,24 @@ jobs:
           " "$body"
 
       - name: Stack-check LLM
-        run: docker compose run --rm --no-deps stack-check
+        run: docker compose --profile check run --rm --no-deps stack-check
+
+      - name: Smoke AI chat
+        env:
+          BASE_URL: http://127.0.0.1:3100/api/v1
+          SMOKE_PROFILE: ci
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          echo "::group::AI chat smoke (prompt → reply)"
+          ./scripts/smoke-ai-chat.sh
+          echo "::endgroup::"
 
       - name: Show logs
         if: failure()
-        run: docker compose logs --no-color
+        run: docker compose logs --no-color api ollama ollama-warm
 
       - name: Tear down
         if: always()

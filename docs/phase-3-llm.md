@@ -43,6 +43,7 @@ Recommended layout:
 - Production `.env` sets `LLM_ENABLED=true`, a private `LLM_BASE_URL`, and restart policies on the inference host.
 - Keep `LLM_MODEL=qwen3:4b` (or larger) only when the inference box has enough RAM. Development can stay on `qwen3:1.7b`.
 - Deploy with `yarn docker:live` (or `docker compose -f docker-compose.prod.yml up -d` then `run --rm stack-check`). The oneshot `stack-check` service (Compose profile `check`) hits `GET /api/v1/health` and `GET /api/v1/health/llm` and fails the update if the boot LLM probe chat did not succeed. It is not started by `up --wait` so oneshot exit 0 cannot fail Compose wait. Local `yarn docker:up` runs the same check against Compose Ollama.
+- After stack-check, `yarn docker:up` and CI also run `scripts/smoke-ai-chat.sh`: create a guest conversation, send real prompts, log each `>>>` / `<<<` turn, and fail on empty replies, CoT leaks, or missing expected substrings. Re-run anytime with `yarn docker:smoke-ai` (`SMOKE_PROFILE=ci` for the shorter CI set).
 
 Persistence and recovery:
 
