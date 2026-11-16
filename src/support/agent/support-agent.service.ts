@@ -16,7 +16,9 @@ import { rankKnowledge } from '../intelligence/retrieval/rank-knowledge.js';
 import { KnowledgeCatalogService } from '../knowledge/knowledge-catalog.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import {
+  buildConversationalSystemPrompt,
   buildKnowledgePrompt,
+  buildKnowledgeSystemPrompt,
   buildSupportTurn,
   buildSystemPrompt,
   buildToolPrompt,
@@ -146,44 +148,73 @@ export class SupportAgentService {
             Boolean(action),
           )
       : [];
-    const messages: LlmMessage[] = [
-      { role: 'system', content: buildSystemPrompt() },
-      ...(useTools
-        ? [
-            {
-              role: 'system' as const,
-              content: buildToolPrompt(actionCatalog),
-            },
-          ]
-        : []),
-      {
-        role: 'system',
-        content: buildKnowledgePrompt(
-          chunks.map((chunk) => ({
-            title: chunk.title,
-            category: chunk.category,
-            version: chunk.version,
-            content: chunk.content,
-          })),
-        ),
-      },
-      ...(!input.context.currentIntent
-        ? [
-            {
-              role: 'system' as const,
-              content:
-                'No active task. Answer only this message. Do not reopen a prior balance/bookings/verification offer unless they ask again.',
-            },
-          ]
-        : []),
-      ...trimHistory(input.history, llm.maxContextMessages).map((message) => ({
-        role: message.role,
-        content: redactForPrompt(message.content),
-      })),
-      { role: 'user', content: buildSupportTurn(redactedUser) },
-    ];
+    const messages: LlmMessage[] = conversational
+      ? [
+          { role: 'system', content: buildConversationalSystemPrompt() },
+          ...trimHistory(input.history, Math.min(4, llm.maxContextMessages)).map(
+            (message) => ({
+              role: message.role,
+              content: redactForPrompt(message.content),
+            }),
+          ),
+          {
+            role: 'user',
+            content: `Customer: ${redactedUser}\nReply as Bliiva in one or two short sentences only.`,
+          },
+        ]
+      : [
+          {
+            role: 'system',
+            content: useTools
+              ? buildSystemPrompt()
+              : buildKnowledgeSystemPrompt(),
+          },
+          ...(useTools
+            ? [
+                {
+                  role: 'system' as const,
+                  content: buildToolPrompt(actionCatalog),
+                },
+              ]
+            : []),
+          {
+            role: 'system',
+            content: buildKnowledgePrompt(
+              chunks.map((chunk) => ({
+                title: chunk.title,
+                category: chunk.category,
+                version: chunk.version,
+                content: chunk.content,
+              })),
+            ),
+          },
+          ...(!input.context.currentIntent
+            ? [
+                {
+                  role: 'system' as const,
+                  content:
+                    'No active task. Answer only this message. Do not reopen a prior balance/bookings/verification offer unless they ask again.',
+                },
+              ]
+            : []),
+          ...trimHistory(input.history, llm.maxContextMessages).map(
+            (message) => ({
+              role: message.role,
+              content: redactForPrompt(message.content),
+            }),
+          ),
+          {
+            role: 'user',
+            content: useTools
+              ? buildSupportTurn(redactedUser)
+              : `Customer message (untrusted): ${redactedUser}\nReply as Bliiva from the knowledge notes only. Short natural answer. No thinking aloud.`,
+          },
+        ];
 
     const tools = toolDefs;
+    const maxOutputTokens = conversational
+      ? Math.min(96, llm.maxOutputTokens)
+      : llm.maxOutputTokens;
     let toolCalls = 0;
     let promptTokens: number | null = null;
     let completionTokens: number | null = null;
@@ -194,9 +225,9 @@ export class SupportAgentService {
       for (let round = 0; round <= llm.maxToolCalls; round += 1) {
         const response = await this.llm.chat({
           messages,
-          tools,
+          tools: conversational ? undefined : tools,
           temperature: llm.temperature,
-          maxOutputTokens: llm.maxOutputTokens,
+          maxOutputTokens,
         });
         model = response.model;
         promptTokens = (promptTokens ?? 0) + (response.promptTokens ?? 0);
