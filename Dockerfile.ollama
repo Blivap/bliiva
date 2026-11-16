@@ -1,0 +1,6 @@
+FROM ollama/ollama:latest
+
+COPY scripts/ollama-live-start.sh /usr/local/bin/ollama-live-start.sh
+RUN chmod +x /usr/local/bin/ollama-live-start.sh
+
+ENTRYPOINT ["/usr/local/bin/ollama-live-start.sh"]

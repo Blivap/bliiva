@@ -34,14 +34,11 @@ Expected memory: Ollama with Qwen3 1.7B + nomic-embed-text fits an 8 GB laptop w
 
 ## Production
 
-Run inference on a **separate** private host. Do not put Ollama on the ~1 GB DigitalOcean API droplet, and do not depend on a developer MacBook.
+Ollama runs beside the API, the same way local Compose does. It is not given a public URL.
 
-Recommended layout:
-
-- NestJS API reaches `LLM_BASE_URL` over a private network / VPN / internal DNS only.
-- Port `11434` is bound to the private interface. It is never exposed to the public internet or to the Next.js frontend.
-- Production `.env` sets `LLM_ENABLED=true`, a private `LLM_BASE_URL`, and restart policies on the inference host.
-- Keep `LLM_MODEL=qwen3:4b` (or larger) only when the inference box has enough RAM. Development can stay on `qwen3:1.7b`.
+- `docker-compose.prod.yml` starts `ollama` and `ollama-warm`. The API uses `http://ollama:11434`. Model files stay on the `bliiva_ollama` volume. Port `11434` is not published.
+- On Render, `render.yaml` starts a private service `bliiva-ollama` and sets the API `LLM_BASE_URL` to that service's internal host and port. Sync the Blueprint in the same region as the API.
+- Keep `LLM_MODEL=qwen3:4b` only when that Ollama service has about 8 GB of RAM. Development can stay on `qwen3:1.7b`.
 - Deploy with `yarn docker:live` (or `docker compose -f docker-compose.prod.yml up -d` then `run --rm stack-check`). The oneshot `stack-check` service (Compose profile `check`) hits `GET /api/v1/health` and `GET /api/v1/health/llm` and fails the update if the boot LLM probe chat did not succeed. It is not started by `up --wait` so oneshot exit 0 cannot fail Compose wait. Local `yarn docker:up` runs the same check against Compose Ollama.
 - After stack-check, `yarn docker:up` and CI also run `scripts/smoke-ai-chat.sh`: create a guest conversation, send real prompts, log each `>>>` / `<<<` turn, and fail on empty replies, CoT leaks, or missing expected substrings. Re-run anytime with `yarn docker:smoke-ai` (`SMOKE_PROFILE=ci` for the shorter CI set).
 
