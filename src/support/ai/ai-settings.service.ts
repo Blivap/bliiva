@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { ChatEndpointConfig } from '../../config/llm-endpoints.js';
 
 export interface LlmRuntimeSettings {
   enabled: boolean;
@@ -19,6 +20,7 @@ export interface LlmRuntimeSettings {
   keepAlive: string;
   turnLimit: number;
   turnWindowMs: number;
+  chatEndpoints: ChatEndpointConfig[];
 }
 
 export interface EmbeddingRuntimeSettings {
@@ -82,6 +84,10 @@ export class AiSettingsService {
         keepAlive: this.config.get<string>('llm.keepAlive', '5m'),
         turnLimit: this.config.get<number>('llm.turnLimit', 12),
         turnWindowMs: this.config.get<number>('llm.turnWindowMs', 60000),
+        chatEndpoints: this.config.get<ChatEndpointConfig[]>(
+          'llm.chatEndpoints',
+          [],
+        ),
       },
       embedding: {
         provider: this.config.get<string>('embedding.provider', 'ollama'),

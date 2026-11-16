@@ -174,4 +174,39 @@ describe('LlmService', () => {
     expect(response.message.content).toBe('ready');
     expect(chat).toHaveBeenCalledTimes(2);
   });
+
+  it('redacts emails and NIN before the provider call', async () => {
+    const chat = vi.fn(async () => ({
+      message: { role: 'assistant' as const, content: 'ok' },
+      toolCalls: [],
+      promptTokens: 1,
+      completionTokens: 1,
+      durationMs: 1,
+      model: 'qwen3:1.7b',
+    }));
+    const provider = {
+      name: 'ollama',
+      chat,
+      stream: async function* () {},
+      health: vi.fn(),
+      unload: vi.fn(),
+    } as unknown as LlmProvider;
+    const service = new LlmService(
+      settings({ maxContextTokens: 1000 }),
+      provider,
+    );
+    await service.chat({
+      messages: [
+        {
+          role: 'user',
+          content: 'me@example.com nin 12345678901',
+        },
+      ],
+    });
+    const sent = chat.mock.calls[0]?.[0] as {
+      messages: Array<{ content: string }>;
+    };
+    expect(sent.messages[0]?.content).not.toContain('me@example.com');
+    expect(sent.messages[0]?.content).not.toContain('12345678901');
+  });
 });

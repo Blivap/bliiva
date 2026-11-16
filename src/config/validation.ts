@@ -95,4 +95,4 @@ export const envValidationSchema = Joi.object({
   VECTOR_STORE: Joi.string().valid('mongodb', 'qdrant').default('mongodb'),
   QDRANT_URL: Joi.string().uri().allow('').optional(),
   QDRANT_COLLECTION: Joi.string().default('bliiva_knowledge'),
-});
+}).pattern(/^LLM_(URL|KEY|MODEL)_[1-8]$/, Joi.string().allow(''));

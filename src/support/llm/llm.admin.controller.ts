@@ -60,6 +60,10 @@ export class LlmAdminController {
       maxContextTokens: current.llm.maxContextTokens,
       concurrency: current.llm.maxConcurrent,
       maxToolCalls: current.llm.maxToolCalls,
+      chatEndpoints: current.llm.chatEndpoints.map((endpoint) => ({
+        url: safeUrl(endpoint.url),
+        model: endpoint.model,
+      })),
       embeddingModel: current.embedding.model,
       ragEnabled: current.rag.enabled,
       topK: current.rag.topK,

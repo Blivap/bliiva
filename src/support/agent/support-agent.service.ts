@@ -17,12 +17,10 @@ import { KnowledgeCatalogService } from '../knowledge/knowledge-catalog.service.
 import { LlmService } from '../llm/llm.service.js';
 import {
   buildConversationalSystemPrompt,
-  buildKnowledgePrompt,
-  buildKnowledgeSystemPrompt,
   buildSupportTurn,
-  buildSystemPrompt,
-  buildToolPrompt,
+  NO_RELIABLE_ANSWER,
 } from '../llm/prompts/index.js';
+import { selectTurnTools } from '../llm/select-turn-tools.js';
 import { ESCALATION_OFFER_QUESTION } from '../intelligence/response/response-composer.js';
 import {
   detectPromptInjection,
@@ -140,23 +138,52 @@ export class SupportAgentService {
     }
 
     const toolDefs = useTools ? this.tools.list() : [];
-    const actionCatalog = useTools
-      ? this.tools
-          .list()
-          .map((tool) => this.tools.get(tool.name))
-          .filter((action): action is NonNullable<typeof action> =>
-            Boolean(action),
-          )
+    const selectedTools = useTools
+      ? selectTurnTools(input.content, toolDefs)
       : [];
+    const liveData =
+      useTools && !conversational
+        ? inferImmediateLiveDataAction(input.content)
+        : null;
+    if (liveData) {
+      const forcedTool = toolDefs.find(
+        (tool) => tool.name === liveData.actionName,
+      );
+      if (
+        forcedTool &&
+        !selectedTools.some((tool) => tool.name === forcedTool.name)
+      ) {
+        selectedTools.unshift(forcedTool);
+        selectedTools.length = Math.min(selectedTools.length, 3);
+      }
+    }
+    const accountTurn =
+      Boolean(liveData) ||
+      (!HOW_TO.test(input.content) && selectedTools.length > 0);
+    if (!conversational && chunks.length === 0 && !accountTurn) {
+      return missedAnswer(
+        base,
+        'no_relevant_knowledge',
+        started,
+        retrieval.durationMs,
+      );
+    }
+    const notes = chunks.map((chunk) => ({
+      title: chunk.title,
+      category: chunk.category,
+      version: chunk.version,
+      content: chunk.content,
+    }));
     const messages: LlmMessage[] = conversational
       ? [
           { role: 'system', content: buildConversationalSystemPrompt() },
-          ...trimHistory(input.history, Math.min(4, llm.maxContextMessages)).map(
-            (message) => ({
-              role: message.role,
-              content: redactForPrompt(message.content),
-            }),
-          ),
+          ...trimHistory(
+            input.history,
+            Math.min(4, llm.maxContextMessages),
+          ).map((message) => ({
+            role: message.role,
+            content: redactForPrompt(message.content),
+          })),
           {
             role: 'user',
             content: `Customer: ${redactedUser}\nReply as Bliiva in one or two short sentences only.`,
@@ -165,28 +192,7 @@ export class SupportAgentService {
       : [
           {
             role: 'system',
-            content: useTools
-              ? buildSystemPrompt()
-              : buildKnowledgeSystemPrompt(),
-          },
-          ...(useTools
-            ? [
-                {
-                  role: 'system' as const,
-                  content: buildToolPrompt(actionCatalog),
-                },
-              ]
-            : []),
-          {
-            role: 'system',
-            content: buildKnowledgePrompt(
-              chunks.map((chunk) => ({
-                title: chunk.title,
-                category: chunk.category,
-                version: chunk.version,
-                content: chunk.content,
-              })),
-            ),
+            content: buildSupportTurn(redactedUser, notes),
           },
           ...(!input.context.currentIntent
             ? [
@@ -205,13 +211,12 @@ export class SupportAgentService {
           ),
           {
             role: 'user',
-            content: useTools
-              ? buildSupportTurn(redactedUser)
-              : `Customer message (untrusted): ${redactedUser}\nReply as Bliiva from the knowledge notes only. Short natural answer. No thinking aloud.`,
+            content: redactedUser,
           },
         ];
 
-    const tools = toolDefs;
+    const tools = selectedTools;
+    const allowedToolNames = new Set(tools.map((tool) => tool.name));
     const maxOutputTokens = conversational
       ? Math.min(96, llm.maxOutputTokens)
       : llm.maxOutputTokens;
@@ -225,7 +230,7 @@ export class SupportAgentService {
       for (let round = 0; round <= llm.maxToolCalls; round += 1) {
         const response = await this.llm.chat({
           messages,
-          tools: conversational ? undefined : tools,
+          tools: conversational || tools.length === 0 ? undefined : tools,
           temperature: llm.temperature,
           maxOutputTokens,
         });
@@ -435,6 +440,18 @@ export class SupportAgentService {
         });
 
         for (const call of response.toolCalls) {
+          if (useTools && !allowedToolNames.has(call.name)) {
+            messages.push({
+              role: 'tool',
+              toolName: call.name,
+              toolCallId: call.id,
+              content: JSON.stringify({
+                status: 'rejected',
+                message: 'That action is not available for this turn.',
+              }),
+            });
+            continue;
+          }
           toolCalls += 1;
           const result = await this.executor.execute({
             name: call.name,
@@ -556,6 +573,7 @@ export class SupportAgentService {
           messages.push({
             role: 'tool',
             toolName: call.name,
+            toolCallId: call.id,
             content: JSON.stringify(payload),
           });
         }
@@ -584,25 +602,20 @@ export class SupportAgentService {
           message: error instanceof Error ? error.message : 'unknown',
         }),
       );
-      const unavailable =
-        code === 'runtime_unreachable' ||
-        code === 'model_unavailable' ||
-        code === 'model_loading' ||
-        code === 'busy' ||
-        code === 'timeout';
       return {
-        ...base,
-        outcome: unavailable ? 'unavailable' : 'fallback',
-        reason: code,
-        errorCode: code,
+        ...missedAnswer(
+          base,
+          'llm_providers_failed',
+          started,
+          retrieval.durationMs,
+          code,
+        ),
         model,
         promptTokens,
         completionTokens,
-        retrievalDurationMs: retrieval.durationMs,
         knowledgeRefs: knowledgeRefs(chunks),
         chunks,
         toolCalls,
-        latencyMs: Date.now() - started,
       };
     }
   }
@@ -721,6 +734,34 @@ function knowledgeRefs(
     });
   }
   return refs;
+}
+
+const HOW_TO =
+  /\b(how (?:can|do|to)|where (?:can|do|to)|can i|is it possible to)\b/i;
+
+function missedAnswer(
+  base: SupportAgentTurnResult,
+  reason: string,
+  started: number,
+  retrievalMs: number,
+  errorCode: string | null = null,
+): SupportAgentTurnResult {
+  return {
+    ...base,
+    outcome: 'answered',
+    responseType: OrchestratorResponseType.Answered,
+    content: NO_RELIABLE_ANSWER,
+    reason,
+    errorCode,
+    retrievalDurationMs: retrievalMs,
+    latencyMs: Date.now() - started,
+    context: {
+      ...base.context,
+      conversationState: 'answered',
+      pendingClarification: null,
+      unsuccessfulAttempts: 0,
+    },
+  };
 }
 
 function isConversational(text: string): boolean {
