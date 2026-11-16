@@ -18,20 +18,20 @@ describe('resolveRedisConnection', () => {
     });
   });
 
-  it('parses redis:// and rediss:// connection strings', () => {
+  it('parses redis:// and rediss:// connection strings onto database 0', () => {
     expect(
       resolveRedisConnection({
         url: 'redis://:pass%40word@cache.example:6380/2',
         host: 'localhost',
         port: 6379,
-        db: 0,
+        db: 1,
       }),
     ).toEqual({
       host: 'cache.example',
       port: 6380,
       username: undefined,
       password: 'pass@word',
-      db: 2,
+      db: 0,
       tls: undefined,
     });
 
