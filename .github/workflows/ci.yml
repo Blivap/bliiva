@@ -109,6 +109,7 @@ jobs:
       - name: Boot the stack from the image
         run: |
           docker tag "${IMAGE_NAME}:ci" "${IMAGE_NAME}:local"
+          # stack-check uses profile "check" so --wait is not broken by the oneshot exit.
           docker compose up -d --no-build --wait --wait-timeout 180
 
       - name: Check health
@@ -124,6 +125,9 @@ jobs:
               process.exit(1);
             }
           " "$body"
+
+      - name: Stack-check LLM
+        run: docker compose run --rm --no-deps stack-check
 
       - name: Show logs
         if: failure()
