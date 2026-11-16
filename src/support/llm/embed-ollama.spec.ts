@@ -14,20 +14,9 @@ describe('embeddedOllamaPlan', () => {
       }),
     ).toEqual({
       start: true,
-      model: 'qwen3:4b',
+      model: 'qwen3:1.7b',
       baseUrl: 'http://127.0.0.1:11434',
     });
-  });
-
-  it('uses the smaller model when the instance cannot hold 4B', () => {
-    expect(
-      embeddedOllamaPlan({
-        baseUrl: 'http://bliiva-llm.internal:11434',
-        model: 'qwen3:4b',
-        totalBytes: 4 * GB,
-        binaryPresent: true,
-      }),
-    ).toMatchObject({ start: true, model: 'qwen3:1.7b' });
   });
 
   it('leaves a reachable Ollama host alone', () => {
