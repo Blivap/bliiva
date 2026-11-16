@@ -28,14 +28,15 @@ export function resolveRedisConnection(input: {
   }
 
   const parsed = new URL(input.url);
-  const dbPath = parsed.pathname.replace(/^\//, '');
-  const db = dbPath ? Number.parseInt(dbPath, 10) : input.db;
+  // Live URLs (Render Key Value and other managed Redis) only have database 0.
+  // A path like /1 or REDIS_DB=1 makes that server return
+  // "ERR DB index is out of range". Key prefixes keep Bliiva keys separate.
   return {
     host: parsed.hostname,
     port: Number.parseInt(parsed.port || '6379', 10),
     username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
     password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
-    db: Number.isFinite(db) ? db : input.db,
+    db: 0,
     tls: parsed.protocol === 'rediss:' ? {} : undefined,
   };
 }

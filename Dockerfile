@@ -9,14 +9,23 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN yarn build
 
-FROM node:22-alpine AS runner
+FROM ollama/ollama:latest AS ollama
+
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
-    API_PREFIX=api/v1
+    API_PREFIX=api/v1 \
+    LD_LIBRARY_PATH=/usr/lib/ollama
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libgomp1 libopenblas0 libvulkan1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=ollama /usr/bin/ollama /usr/local/bin/ollama
+COPY --from=ollama /usr/lib/ollama /usr/lib/ollama
 COPY package.json yarn.lock .yarnrc ./
 RUN yarn install --frozen-lockfile --production && yarn cache clean
 COPY --from=build --chown=node:node /app/dist ./dist
+RUN mkdir -p /home/node/.ollama && chown -R node:node /home/node/.ollama
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
