@@ -20,7 +20,9 @@ ENV NODE_ENV=production \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libgomp1 libopenblas0 libvulkan1 \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=ollama /usr/bin/ollama /usr/local/bin/ollama
+# Keep the official layout. The binary looks for llama-server in ../lib/ollama
+# relative to itself, so /usr/local/bin/ollama never sees /usr/lib/ollama.
+COPY --from=ollama /usr/bin/ollama /usr/bin/ollama
 COPY --from=ollama /usr/lib/ollama /usr/lib/ollama
 COPY package.json yarn.lock .yarnrc ./
 RUN yarn install --frozen-lockfile --production && yarn cache clean
