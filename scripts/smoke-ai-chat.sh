@@ -9,6 +9,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/lib/local-env.sh"
 BASE="${BASE_URL:-http://127.0.0.1:3100/api/v1}"
 KEY="${SUPPORT_SERVICE_API_KEY:-change-me-support-service-key}"
 PROFILE="${SMOKE_PROFILE:-full}"
