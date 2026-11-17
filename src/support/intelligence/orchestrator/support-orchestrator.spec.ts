@@ -239,12 +239,49 @@ describe('support orchestrator', () => {
   it('greets immediately without waiting on profile lookup', async () => {
     const { orchestrator, conversation } = harness();
     const turn = await orchestrator.process(conversation, 'hi', user);
-    expect(turn.content).toMatch(
-      /^Hi — I’m Bliiva, Blivap’s official AI support assistant/,
-    );
+    expect(turn.content).toContain('Hi there!');
+    expect(turn.content).toContain("I'm **Bliiva**");
+    expect(turn.content).toContain('**Account:**');
+    expect(turn.content).toContain('What would you like help with today?');
   });
 
-  it('keeps greetings on the rules path even when the LLM is enabled', async () => {
+  it('sends greetings to the model with a reply shape', async () => {
+    let guide = '';
+    const { orchestrator, conversation } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async (input: { replyGuide?: string | null }) => {
+          guide = input.replyGuide ?? '';
+          return {
+            outcome: 'answered',
+            reason: 'llm_answer',
+            content:
+              "Hi there! 👋 I'm **Bliiva** 🩸, Blivap's support assistant.\n\nWhat would you like help with today?",
+            responseType: 'ANSWERED',
+            context: {},
+            knowledgeRefs: [],
+            chunks: [],
+            toolCalls: 0,
+            model: 'qwen3:1.7b',
+            promptTokens: 1,
+            completionTokens: 1,
+            latencyMs: 1,
+            retrievalDurationMs: 0,
+            escalate: false,
+            escalationReason: null,
+          };
+        },
+      },
+    });
+    const turn = await orchestrator.process(conversation, 'hi', user);
+    expect(guide).toContain('REPLY SHAPE');
+    expect(guide).toContain('**Account:**');
+    expect(guide).toContain('What would you like help with today?');
+    expect(turn.content).toContain("I'm **Bliiva**");
+    expect(turn.content).not.toContain('support@blivap.com');
+  });
+
+  it('uses the shaped greeting when the model cannot answer hi', async () => {
     let agentCalled = false;
     const { orchestrator, conversation } = harness({
       agent: {
@@ -272,12 +309,10 @@ describe('support orchestrator', () => {
         },
       },
     });
-    const turn = await orchestrator.process(conversation, 'hi', user);
-    expect(agentCalled).toBe(false);
-    expect(turn.content).toMatch(
-      /^Hi — I’m Bliiva, Blivap’s official AI support assistant/,
-    );
-    expect(turn.content).not.toContain('support@blivap.com');
+    const turn = await orchestrator.process(conversation, 'good morning', user);
+    expect(agentCalled).toBe(true);
+    expect(turn.content).toContain('Hi there!');
+    expect(turn.content).toContain('**Wallet:**');
   });
 
   it('falls back to rules knowledge when the LLM times out', async () => {
@@ -320,9 +355,8 @@ describe('support orchestrator', () => {
       recognizedEntities: { userName: 'Ada' },
     };
     const turn = await orchestrator.process(conversation, 'hello', user);
-    expect(turn.content).toBe(
-      'Hi Ada — I’m Bliiva, Blivap’s official AI support assistant. How can I help?',
-    );
+    expect(turn.content).toContain('Hi Ada!');
+    expect(turn.content).toContain("I'm **Bliiva**");
   });
 
   it('answers a compound greeting without falling back', async () => {
@@ -332,7 +366,7 @@ describe('support orchestrator', () => {
       "hello what's your name",
       user,
     );
-    expect(turn.content.toLowerCase()).toMatch(/blivap.*ai support assistant/);
+    expect(turn.content.toLowerCase()).toMatch(/support assistant/);
     expect(turn.content).not.toContain('Couldn’t match');
   });
 
@@ -344,7 +378,7 @@ describe('support orchestrator', () => {
     const { orchestrator, conversation } = harness();
     const turn = await orchestrator.process(conversation, content, user);
     expect(turn.content.toLowerCase()).toContain('bliiva');
-    expect(turn.content.toLowerCase()).toMatch(/blivap.*ai support assistant/);
+    expect(turn.content.toLowerCase()).toMatch(/support assistant/);
   });
 
   it('answers are-you-ai chitchat without the fallback phrase', async () => {
@@ -354,7 +388,7 @@ describe('support orchestrator', () => {
       'hi are you and ai ?',
       user,
     );
-    expect(turn.content.toLowerCase()).toMatch(/blivap.*ai support assistant/);
+    expect(turn.content.toLowerCase()).toMatch(/support assistant/);
     expect(turn.content).not.toContain('Couldn’t match');
   });
 
@@ -550,8 +584,9 @@ describe('support orchestrator', () => {
     conversations.set(conversation.id, conversation);
 
     const turn = await orchestrator.process(conversation, 'alright', user);
-    expect(turn.content.toLowerCase()).toContain('here if you need');
-    expect(turn.content.toLowerCase()).not.toContain('verif');
+    expect(turn.content).toContain('Got it');
+    expect(turn.content).toContain('What would you like to do next?');
+    expect(turn.content.toLowerCase()).not.toContain('how can i verify');
     expect(turn.state.currentIntent).toBeNull();
   });
 
@@ -597,5 +632,209 @@ describe('support orchestrator', () => {
       user,
     );
     expect(analytics[0]?.questionExcerpt).toBeNull();
+  });
+
+  it('opens a ticket for account deletion and does not call the model', async () => {
+    let agentCalled = false;
+    const { orchestrator, conversation, escalations } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async () => {
+          agentCalled = true;
+          return { outcome: 'answered', content: 'Account has been deleted.' };
+        },
+      },
+    });
+    const turn = await orchestrator.process(
+      conversation,
+      'delete my account',
+      user,
+    );
+    expect(agentCalled).toBe(false);
+    expect(escalations).toHaveLength(1);
+    expect(escalations[0]?.reason).toBe('account_deletion');
+    expect(escalations[0]?.intent).toBe('ACCOUNT_DELETION');
+    expect(turn.content).toContain("can't delete accounts from chat");
+    expect(turn.content).toContain('ticket #SUP-TEST-1000');
+    expect(turn.content.toLowerCase()).not.toContain('has been deleted');
+    expect(turn.content).toContain('support@blivap.com');
+  });
+
+  it('deletes the account before listing bookings in a mixed message', async () => {
+    let agentCalled = false;
+    const { orchestrator, conversation, escalations } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async () => {
+          agentCalled = true;
+          return { outcome: 'answered', content: 'Here are your bookings.' };
+        },
+      },
+    });
+    const turn = await orchestrator.process(
+      conversation,
+      'close all my bookings and delete the account',
+      user,
+    );
+    expect(agentCalled).toBe(false);
+    expect(escalations[0]?.intent).toBe('ACCOUNT_DELETION');
+    expect(turn.content.toLowerCase()).not.toContain('upcoming appointment');
+    expect(turn.content).toContain('ticket #SUP-TEST-1000');
+  });
+
+  it('escalates connect me to a human before the model runs', async () => {
+    let agentCalled = false;
+    const { orchestrator, conversation, escalations } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async () => {
+          agentCalled = true;
+          return { outcome: 'answered', content: 'Sure, one moment.' };
+        },
+      },
+    });
+    const turn = await orchestrator.process(
+      conversation,
+      'connect me to a human',
+      user,
+    );
+    expect(agentCalled).toBe(false);
+    expect(turn.responseType).toBe('ESCALATED');
+    expect(escalations[0]?.reason).toBe('human_requested');
+  });
+
+  it('sends thanks, ok, and bye to the model with a reply shape', async () => {
+    const guides: string[] = [];
+    const { orchestrator, conversation, conversations } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async (input: { replyGuide?: string | null }) => {
+          guides.push(input.replyGuide ?? '');
+          return {
+            outcome: 'answered',
+            reason: 'llm_answer',
+            content: `Shaped reply ${guides.length}.`,
+            responseType: 'ANSWERED',
+            context: {},
+            knowledgeRefs: [],
+            chunks: [],
+            toolCalls: 0,
+            model: 'qwen3:1.7b',
+            promptTokens: 1,
+            completionTokens: 1,
+            latencyMs: 1,
+            retrievalDurationMs: 0,
+            escalate: false,
+            escalationReason: null,
+          };
+        },
+      },
+    });
+    for (const message of ['thanks', 'ok', 'bye']) {
+      const current = conversations.get(conversation.id) ?? conversation;
+      await orchestrator.process(current, message, user);
+    }
+    expect(guides[0]).toContain("You're welcome");
+    expect(guides[1]).toContain('Got it');
+    expect(guides[2]).toContain('Bye for now');
+    expect(guides.every((guide) => guide.includes('REPLY SHAPE'))).toBe(true);
+  });
+
+  it('asks what a bare yes means when nothing is waiting to confirm', async () => {
+    let agentCalled = false;
+    const { orchestrator, conversation } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async () => {
+          agentCalled = true;
+          return { outcome: 'answered', content: 'Account has been deleted.' };
+        },
+      },
+    });
+    const turn = await orchestrator.process(conversation, 'yes', user);
+    expect(agentCalled).toBe(false);
+    expect(turn.content).toContain('Yes to what?');
+    expect(turn.content.toLowerCase()).not.toContain('has been deleted');
+  });
+
+  it('escalates when the last two bot replies are the same unhelpful text', async () => {
+    let agentCalled = 0;
+    const loop =
+      "I'm here to help. Let me know how you'd like to proceed with deleting your account.";
+    const { orchestrator, conversation, escalations, conversations } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async () => {
+          agentCalled += 1;
+          return {
+            outcome: 'answered',
+            reason: 'llm_answer',
+            content: loop,
+            responseType: 'ANSWERED',
+            context: {},
+            knowledgeRefs: [],
+            chunks: [],
+            toolCalls: 0,
+            model: 'qwen3:1.7b',
+            promptTokens: 1,
+            completionTokens: 1,
+            latencyMs: 1,
+            retrievalDurationMs: 0,
+            escalate: false,
+            escalationReason: null,
+          };
+        },
+      },
+    });
+    const prompts = [
+      'please help me sort this out',
+      'i am still waiting on an answer',
+      'can you actually do something',
+      'this is still not helping me',
+    ];
+    const turns = [];
+    for (const prompt of prompts) {
+      const current = conversations.get(conversation.id) ?? conversation;
+      turns.push(await orchestrator.process(current, prompt, user));
+    }
+    expect(agentCalled).toBe(2);
+    expect(escalations.some((item) => item.reason === 'reply_loop')).toBe(
+      true,
+    );
+    expect(turns[3]?.content).not.toContain(loop);
+  });
+
+  it('replaces an unconfirmed deletion claim with a handoff', async () => {
+    const { orchestrator, conversation, escalations } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async () => ({
+          outcome: 'answered',
+          reason: 'unconfirmed_action_claim',
+          content: '',
+          responseType: 'ANSWERED',
+          context: {},
+          knowledgeRefs: [],
+          chunks: [],
+          toolCalls: 0,
+          model: 'qwen3:1.7b',
+          promptTokens: 1,
+          completionTokens: 1,
+          latencyMs: 1,
+          retrievalDurationMs: 0,
+          escalate: true,
+          escalationReason: 'unconfirmed_action_claim',
+        }),
+      },
+    });
+    const turn = await orchestrator.process(
+      conversation,
+      'has the account been deleted?',
+      user,
+    );
+    expect(turn.content.toLowerCase()).not.toContain('has been deleted');
+    expect(turn.content).toContain('confirm that from here');
+    expect(turn.content).toContain('ticket #SUP-TEST-1000');
+    expect(escalations[0]?.reason).toBe('unconfirmed_action_claim');
   });
 });

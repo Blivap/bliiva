@@ -31,6 +31,10 @@ import { RagService } from '../rag/rag.service.js';
 import type { RetrievedChunk } from '../rag/rag.types.js';
 import { ToolsExecutor } from '../tools/tools.executor.js';
 import { ToolsRegistry } from '../tools/tools.registry.js';
+import {
+  claimsCompletedAction,
+  toolConfirmsCompletion,
+} from './action-claim.js';
 import { sanitizeAnswer } from './sanitize-answer.js';
 import type {
   SupportAgentHistoryMessage,
@@ -62,6 +66,8 @@ export class SupportAgentService {
     history: SupportAgentHistoryMessage[];
     category?: string | null;
     confirmationId?: string;
+    /** Rules shape for greetings, thanks, ok, and bye. The model still writes the reply. */
+    replyGuide?: string | null;
   }): Promise<SupportAgentTurnResult> {
     const started = Date.now();
     const llm = this.settings.current().llm;
@@ -106,7 +112,8 @@ export class SupportAgentService {
 
     // Keep chat turns light: embeddings + tools thrash small Ollama hosts
     // (chat model unload → embed load → chat reload → timeout → "Couldn't match").
-    const conversational = isConversational(input.content);
+    const conversational =
+      isConversational(input.content) || Boolean(input.replyGuide);
     const useTools = input.actor.isAuthenticated && !conversational;
     const retrieval = conversational
       ? {
@@ -173,6 +180,9 @@ export class SupportAgentService {
     const messages: LlmMessage[] = useConversationalPrompt
       ? [
           { role: 'system', content: buildConversationalSystemPrompt() },
+          ...(input.replyGuide
+            ? [{ role: 'system' as const, content: input.replyGuide }]
+            : []),
           ...trimHistory(
             input.history,
             Math.min(4, llm.maxContextMessages),
@@ -182,7 +192,9 @@ export class SupportAgentService {
           })),
           {
             role: 'user',
-            content: `Customer: ${redactedUser}\nReply as Bliiva in one or two short sentences only.`,
+            content: input.replyGuide
+              ? `Customer: ${redactedUser}\nFollow the REPLY SHAPE. Keep the bold, bullets, and emojis.`
+              : `Customer: ${redactedUser}\nReply as Bliiva in one or two short sentences only.`,
           },
         ]
       : [
@@ -213,10 +225,13 @@ export class SupportAgentService {
 
     const tools = useConversationalPrompt ? [] : selectedTools;
     const allowedToolNames = new Set(tools.map((tool) => tool.name));
-    const maxOutputTokens = useConversationalPrompt
-      ? Math.min(96, llm.maxOutputTokens)
-      : llm.maxOutputTokens;
+    const maxOutputTokens = input.replyGuide
+      ? Math.min(320, Math.max(llm.maxOutputTokens, 320))
+      : useConversationalPrompt
+        ? Math.min(96, llm.maxOutputTokens)
+        : llm.maxOutputTokens;
     let toolCalls = 0;
+    let completionConfirmed = false;
     let promptTokens: number | null = null;
     let completionTokens: number | null = null;
     let model: string | null = null;
@@ -306,6 +321,31 @@ export class SupportAgentService {
               };
             }
             // Fall through to model text / offer handling if force failed.
+          }
+
+          if (
+            answer &&
+            claimsCompletedAction(answer) &&
+            !completionConfirmed
+          ) {
+            return {
+              ...base,
+              outcome: 'answered',
+              escalate: true,
+              escalationReason: 'unconfirmed_action_claim',
+              responseType: OrchestratorResponseType.Answered,
+              content: '',
+              reason: 'unconfirmed_action_claim',
+              context: nextContext,
+              knowledgeRefs: knowledgeRefs(chunks),
+              chunks,
+              toolCalls,
+              model,
+              promptTokens,
+              completionTokens,
+              retrievalDurationMs: retrieval.durationMs,
+              latencyMs: Date.now() - started,
+            };
           }
 
           if (!answer) {
@@ -458,6 +498,13 @@ export class SupportAgentService {
             context: nextContext,
             confirmationId: input.confirmationId,
           });
+
+          if (
+            result.status === ActionStatus.Success &&
+            toolConfirmsCompletion(call.name)
+          ) {
+            completionConfirmed = true;
+          }
 
           if (result.status === ActionStatus.NeedsConfirmation) {
             nextContext = {

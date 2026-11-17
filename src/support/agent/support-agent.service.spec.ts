@@ -146,6 +146,40 @@ describe('SupportAgentService', () => {
     );
   });
 
+  it('puts the reply shape in front of the model for a greeting', async () => {
+    const chat = vi.fn(async () => ({
+      message: {
+        role: 'assistant',
+        content:
+          "Hi Ada! 👋 I'm **Bliiva** 🩸, Blivap's support assistant.\n\nWhat would you like help with today?",
+      },
+      toolCalls: [],
+      promptTokens: 8,
+      completionTokens: 40,
+      durationMs: 9,
+      model: 'qwen3:1.7b',
+    }));
+    const agent = harness({ chat });
+    const result = await agent.runTurn({
+      conversationId: '64b0000000000000000000bb',
+      content: 'hi',
+      actor,
+      context: emptyContext(),
+      history: [],
+      replyGuide:
+        "REPLY SHAPE\nHi Ada! 👋 I'm **Bliiva**.\n- 👤 **Account:** sign-up",
+    });
+    const chatCalls = chat.mock.calls as unknown as Array<
+      [{ messages?: Array<{ content?: string }>; maxOutputTokens?: number }]
+    >;
+    const messages = chatCalls[0]?.[0]?.messages ?? [];
+    const prompt = messages.map((message) => message.content ?? '').join('\n');
+    expect(prompt).toContain('REPLY SHAPE');
+    expect(prompt).toContain('**Account:**');
+    expect(prompt).not.toContain('one or two short sentences only');
+    expect(result.content).toContain('Hi Ada!');
+  });
+
   it('keeps idle acks conversational without tools or leaked reasoning', async () => {
     const retrieve = vi.fn(async () => ({
       chunks: [],
@@ -381,6 +415,81 @@ describe('SupportAgentService', () => {
     expect(result.outcome).toBe('temporary_error');
     expect(result.reason).toBe('llm_providers_failed');
     expect(result.errorCode).toBe('runtime_unreachable');
+  });
+
+  it('blocks a completion claim when no mutating tool succeeded', async () => {
+    const agent = harness({
+      chat: vi.fn(async () => ({
+        message: {
+          role: 'assistant',
+          content:
+            'Account has been deleted. Let me know if you need further assistance.',
+        },
+        toolCalls: [],
+        promptTokens: 8,
+        completionTokens: 12,
+        durationMs: 9,
+        model: 'qwen3:1.7b',
+      })),
+    });
+    const result = await agent.runTurn({
+      conversationId: '64b0000000000000000000bb',
+      content: 'has the account been deleted?',
+      actor,
+      context: emptyContext(),
+      history: [],
+    });
+    expect(result.reason).toBe('unconfirmed_action_claim');
+    expect(result.content).toBe('');
+    expect(result.escalate).toBe(true);
+  });
+
+  it('still blocks a deletion claim after a read-only tool succeeds', async () => {
+    const chat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { role: 'assistant', content: '' },
+        toolCalls: [{ id: '1', name: 'get_wallet_summary', arguments: {} }],
+        promptTokens: 5,
+        completionTokens: 1,
+        durationMs: 4,
+        model: 'qwen3:1.7b',
+      })
+      .mockResolvedValueOnce({
+        message: {
+          role: 'assistant',
+          content: 'Account has been deleted.',
+        },
+        toolCalls: [],
+        promptTokens: 8,
+        completionTokens: 6,
+        durationMs: 5,
+        model: 'qwen3:1.7b',
+      });
+    const walletTool: LlmToolDefinition = {
+      name: 'get_wallet_summary',
+      description: 'Wallet balance',
+      parameters: { type: 'object', properties: {}, required: [] },
+    };
+    const agent = harness({
+      chat,
+      execute: vi.fn(async () => ({
+        status: ActionStatus.Success,
+        name: 'get_wallet_summary',
+        message: 'Available: NGN 12.50',
+        data: { available: 12.5 },
+      })),
+      toolList: [walletTool],
+    });
+    const result = await agent.runTurn({
+      conversationId: '64b0000000000000000000bb',
+      content: 'what is my wallet balance',
+      actor,
+      context: emptyContext(),
+      history: [],
+    });
+    expect(result.reason).toBe('unconfirmed_action_claim');
+    expect(result.content).not.toMatch(/has been deleted/i);
   });
 
   it('runs a registered wallet tool then answers', async () => {

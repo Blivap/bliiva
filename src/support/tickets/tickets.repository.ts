@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { TicketStatus } from '../../common/enums/index.js';
+import {
+  ACTIVE_TICKET_STATUSES,
+  Priority,
+  TicketStatus,
+} from '../../common/enums/index.js';
 import {
   SupportTicket,
   SupportTicketDocument,
@@ -36,7 +40,10 @@ export class TicketsRepository {
     return this.assignmentModel.create(data);
   }
 
-  updateTicket(id: string | Types.ObjectId, patch: Partial<SupportTicket>) {
+  updateTicket(
+    id: string | Types.ObjectId,
+    patch: Partial<SupportTicket> | Record<string, unknown>,
+  ) {
     return this.ticketModel
       .findByIdAndUpdate(id, { $set: patch }, { new: true })
       .exec();
@@ -47,14 +54,7 @@ export class TicketsRepository {
       .findOne({
         conversationId,
         category,
-        status: {
-          $in: [
-            TicketStatus.Open,
-            TicketStatus.Assigned,
-            TicketStatus.InProgress,
-            TicketStatus.WaitingForUser,
-          ],
-        },
+        status: { $in: [...ACTIVE_TICKET_STATUSES] },
       })
       .exec();
   }
@@ -63,14 +63,7 @@ export class TicketsRepository {
     return this.ticketModel
       .countDocuments({
         assignedAgentId: agentId,
-        status: {
-          $in: [
-            TicketStatus.Open,
-            TicketStatus.Assigned,
-            TicketStatus.InProgress,
-            TicketStatus.WaitingForUser,
-          ],
-        },
+        status: { $in: [...ACTIVE_TICKET_STATUSES] },
       })
       .exec();
   }
@@ -87,5 +80,39 @@ export class TicketsRepository {
         .exec(),
       this.ticketModel.countDocuments(filter).exec(),
     ]);
+  }
+
+  findByStatusOlderThan(status: TicketStatus, olderThan: Date, limit = 100) {
+    return this.ticketModel
+      .find({
+        status,
+        $or: [
+          { statusChangedAt: { $lte: olderThan } },
+          { statusChangedAt: null, updatedAt: { $lte: olderThan } },
+        ],
+      })
+      .sort({ statusChangedAt: 1, updatedAt: 1 })
+      .limit(limit)
+      .exec();
+  }
+
+  findOpenBreaches(olderThan: Date, priorities: Priority[], limit = 100) {
+    return this.ticketModel
+      .find({
+        status: {
+          $in: [
+            TicketStatus.Open,
+            TicketStatus.Assigned,
+            TicketStatus.InProgress,
+            TicketStatus.Escalated,
+          ],
+        },
+        priority: { $in: priorities },
+        breachedAt: null,
+        createdAt: { $lte: olderThan },
+      })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .exec();
   }
 }

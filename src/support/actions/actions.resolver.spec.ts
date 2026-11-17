@@ -35,6 +35,24 @@ describe('actions resolver', () => {
     ).toBeNull();
   });
 
+  it('does not list bookings when the message also asks to delete the account', () => {
+    expect(
+      resolver.resolve({
+        intent: 'BOOKING_HELP',
+        message: 'close all my bookings and delete the account',
+      }),
+    ).toBeNull();
+  });
+
+  it('still refuses a refund asked alongside a booking', () => {
+    expect(
+      resolver.resolve({
+        intent: 'BOOKING_HELP',
+        message: 'close all my bookings and refund my money',
+      }),
+    ).toEqual({ unsupported: 'wallet_mutation_unsupported' });
+  });
+
   it('blocks unsupported peer transfers', () => {
     expect(
       resolver.resolve({

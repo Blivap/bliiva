@@ -3,6 +3,7 @@ import type { Priority } from '../../common/enums/index.js';
 export interface EscalationMessage {
   senderType: string;
   content: string;
+  createdAt?: string;
 }
 
 export interface EscalationRequest {

@@ -8,6 +8,8 @@ import type {
   BlivapBankOption,
   BlivapBloodRequestSummary,
   BlivapCallContext,
+  BlivapEscalateSupportRequest,
+  BlivapEscalateSupportResult,
   BlivapDonationSummary,
   BlivapDonorListItem,
   BlivapHospitalSummary,
@@ -385,5 +387,11 @@ export class NoopBlivapClient implements BlivapIntegrationPort {
     _payload: BlivapNotificationRequest,
   ): Promise<{ accepted: boolean }> {
     return this.unavailable('notifyUser');
+  }
+
+  escalateSupport(
+    _payload: BlivapEscalateSupportRequest,
+  ): Promise<BlivapEscalateSupportResult> {
+    return this.unavailable('escalateSupport');
   }
 }

@@ -45,6 +45,9 @@ export class SupportMessage {
 
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   metadata: Record<string, unknown>;
+
+  /** Set by Mongoose timestamps ({ createdAt: true }). */
+  createdAt?: Date;
 }
 
 export const SupportMessageSchema =

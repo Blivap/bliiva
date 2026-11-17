@@ -13,6 +13,8 @@ import type {
   BlivapBankOption,
   BlivapBloodRequestSummary,
   BlivapCallContext,
+  BlivapEscalateSupportRequest,
+  BlivapEscalateSupportResult,
   BlivapDonationSummary,
   BlivapDonorListItem,
   BlivapHospitalSummary,
@@ -596,6 +598,22 @@ export class HttpBlivapClient implements BlivapIntegrationPort {
   ): Promise<{ accepted: boolean }> {
     await this.serviceRequest('POST', '/support/notify', payload);
     return { accepted: true };
+  }
+
+  async escalateSupport(
+    payload: BlivapEscalateSupportRequest,
+  ): Promise<BlivapEscalateSupportResult> {
+    const envelope = (await this.serviceRequest(
+      'POST',
+      '/support/escalate',
+      payload,
+    )) as Envelope<BlivapEscalateSupportResult>;
+    if (!envelope?.data?.ticketId) {
+      throw new BadGatewayException(
+        'Blivap returned an empty escalation payload.',
+      );
+    }
+    return envelope.data;
   }
 
   private userGet<T>(ctx: BlivapCallContext, path: string): Promise<T> {

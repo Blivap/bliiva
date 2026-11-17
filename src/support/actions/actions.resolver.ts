@@ -4,6 +4,7 @@ import {
   inferImmediateLiveDataAction,
   inferOfferedAction,
 } from '../intelligence/context/offered-action.js';
+import { isAccountDeletionRequest } from '../intelligence/text/account-deletion.js';
 import { normalizeText } from '../intelligence/text/text-normalizer.js';
 import { ActionsRegistry } from './actions.registry.js';
 import type { SupportActionDefinition } from './actions.types.js';
@@ -46,6 +47,8 @@ export class ActionsResolver {
     userGoAhead?: boolean;
   }): ResolvedAction | { unsupported: string } | null {
     const normalized = normalizeText(input.message);
+    // Account deletion is a ticket, never a booking or wallet lookup.
+    if (isAccountDeletionRequest(normalized)) return null;
     for (const rule of UNSUPPORTED) {
       if (!rule.pattern.test(normalized)) continue;
       if (

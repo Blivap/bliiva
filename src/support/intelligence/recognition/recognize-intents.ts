@@ -9,6 +9,10 @@ import {
   type IntentRecognitionResult,
   type RecognitionContext,
 } from '../interfaces/intent-recognizer.interface.js';
+import {
+  accountDeletionRecognition,
+  isAccountDeletionRequest,
+} from '../text/account-deletion.js';
 import { extractEntities } from '../text/entities.js';
 import { matchPhrase, type PhraseMatch } from '../text/fuzzy-matcher.js';
 import { noisyOr } from '../text/score.js';
@@ -188,6 +192,10 @@ export function recognizeIntents(
 ): IntentRecognitionResult {
   const normalized = normalizeText(text);
   if (!normalized) return emptyResult(text);
+  // Destructive account requests beat booking and other lexical hits.
+  if (isAccountDeletionRequest(normalized)) {
+    return accountDeletionRecognition(text);
+  }
   const scored = intents
     .filter((intent) => intent.enabled)
     .map((intent) => scoreIntent(normalized, intent, settings, context))
