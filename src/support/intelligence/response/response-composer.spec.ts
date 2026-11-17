@@ -47,7 +47,7 @@ describe('composeResponse greeting', () => {
 });
 
 describe('composeResponse fallback', () => {
-  it('uses a temporary error when the model did not answer', () => {
+  it('offers Blivap help instead of saying the AI is down', () => {
     const decision: SupportDecision = {
       ...greetDecision(),
       kind: SupportDecisionKind.Fallback,
@@ -56,7 +56,10 @@ describe('composeResponse fallback', () => {
       confidence: 0,
     };
     const result = composeResponse(decision);
-    expect(result.content.toLowerCase()).toContain('support@blivap.com');
-    expect(result.content.toLowerCase()).not.toContain('specialist');
+    expect(result.content.toLowerCase()).toContain('blivap');
+    expect(result.content.toLowerCase()).not.toContain(
+      'temporarily unavailable',
+    );
+    expect(result.content.toLowerCase()).not.toContain('support@blivap.com');
   });
 });
