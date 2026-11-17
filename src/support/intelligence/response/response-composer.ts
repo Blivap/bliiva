@@ -136,7 +136,10 @@ export function composeResponse(
       };
     case SupportDecisionKind.Fallback:
       return {
-        content: join([empathy, temporaryErrorMessage()]),
+        content: join([
+          empathy,
+          'I can help with Blivap accounts, donations, bookings, and wallet. What do you need help with?',
+        ]),
         knowledgeId: null,
         knowledgeTitle: null,
       };

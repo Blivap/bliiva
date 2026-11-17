@@ -18,7 +18,6 @@ import { LlmService } from '../llm/llm.service.js';
 import {
   buildConversationalSystemPrompt,
   buildSupportTurn,
-  NO_RELIABLE_ANSWER,
 } from '../llm/prompts/index.js';
 import { selectTurnTools } from '../llm/select-turn-tools.js';
 import { ESCALATION_OFFER_QUESTION } from '../intelligence/response/response-composer.js';
@@ -160,21 +159,18 @@ export class SupportAgentService {
     const accountTurn =
       Boolean(liveData) ||
       (!HOW_TO.test(input.content) && selectedTools.length > 0);
-    if (!conversational && chunks.length === 0 && !accountTurn) {
-      return missedAnswer(
-        base,
-        'no_relevant_knowledge',
-        started,
-        retrieval.durationMs,
-      );
-    }
+    // No published notes → still call the model on the light conversational
+    // prompt so off-topic / open questions get a real reply instead of the
+    // rules "AI unavailable" fallback.
+    const useConversationalPrompt =
+      conversational || (!accountTurn && chunks.length === 0);
     const notes = chunks.map((chunk) => ({
       title: chunk.title,
       category: chunk.category,
       version: chunk.version,
       content: chunk.content,
     }));
-    const messages: LlmMessage[] = conversational
+    const messages: LlmMessage[] = useConversationalPrompt
       ? [
           { role: 'system', content: buildConversationalSystemPrompt() },
           ...trimHistory(
@@ -215,9 +211,9 @@ export class SupportAgentService {
           },
         ];
 
-    const tools = selectedTools;
+    const tools = useConversationalPrompt ? [] : selectedTools;
     const allowedToolNames = new Set(tools.map((tool) => tool.name));
-    const maxOutputTokens = conversational
+    const maxOutputTokens = useConversationalPrompt
       ? Math.min(96, llm.maxOutputTokens)
       : llm.maxOutputTokens;
     let toolCalls = 0;
@@ -230,7 +226,7 @@ export class SupportAgentService {
       for (let round = 0; round <= llm.maxToolCalls; round += 1) {
         const response = await this.llm.chat({
           messages,
-          tools: conversational || tools.length === 0 ? undefined : tools,
+          tools: useConversationalPrompt || tools.length === 0 ? undefined : tools,
           temperature: llm.temperature,
           maxOutputTokens,
         });
@@ -247,7 +243,7 @@ export class SupportAgentService {
           // Clear live-data asks must never become “Want me to show it?” —
           // run the allowlisted lookup now when the model skipped tools.
           const forced =
-            useTools && !conversational && toolCalls === 0
+            useTools && !useConversationalPrompt && toolCalls === 0
               ? inferImmediateLiveDataAction(input.content)
               : null;
           if (forced) {
@@ -313,11 +309,11 @@ export class SupportAgentService {
 
           if (!answer) {
             // Model only produced thinking / echo — never ship canned filler.
-            // Orchestrator surfaces the support@blivap.com unavailable message.
+            // Orchestrator falls through to Phase 2 rules.
             return {
               ...base,
               outcome: 'unavailable',
-              reason: conversational
+              reason: useConversationalPrompt
                 ? 'sanitized_empty_conversational'
                 : 'empty_model_answer',
               model,
@@ -335,7 +331,7 @@ export class SupportAgentService {
           // Never park a clear live-data ask as an action_offer — execute above
           // already handled offers; if force failed, strip offer framing.
           const offer =
-            conversational || forced
+            useConversationalPrompt || forced
               ? null
               : pendingFromBotOffer({
                   botContent: answer,
@@ -352,7 +348,7 @@ export class SupportAgentService {
             // Soft acks / presence: no follow-up trap.
             // If the model offered to show/check something, remember that
             // offer so the next "yes" runs the action instead of looping.
-            pendingClarification: conversational
+            pendingClarification: useConversationalPrompt
               ? null
               : offer
                 ? {
@@ -602,20 +598,23 @@ export class SupportAgentService {
           message: error instanceof Error ? error.message : 'unknown',
         }),
       );
+      // Provider/timeout failures must not look like a finished answer — the
+      // orchestrator falls through to the Phase 2 rules engine.
       return {
-        ...missedAnswer(
-          base,
-          'llm_providers_failed',
-          started,
-          retrieval.durationMs,
-          code,
-        ),
+        ...base,
+        outcome: 'temporary_error',
+        responseType: OrchestratorResponseType.TemporaryError,
+        content: '',
+        reason: 'llm_providers_failed',
+        errorCode: code,
         model,
         promptTokens,
         completionTokens,
         knowledgeRefs: knowledgeRefs(chunks),
         chunks,
         toolCalls,
+        retrievalDurationMs: retrieval.durationMs,
+        latencyMs: Date.now() - started,
       };
     }
   }
@@ -738,31 +737,6 @@ function knowledgeRefs(
 
 const HOW_TO =
   /\b(how (?:can|do|to)|where (?:can|do|to)|can i|is it possible to)\b/i;
-
-function missedAnswer(
-  base: SupportAgentTurnResult,
-  reason: string,
-  started: number,
-  retrievalMs: number,
-  errorCode: string | null = null,
-): SupportAgentTurnResult {
-  return {
-    ...base,
-    outcome: 'answered',
-    responseType: OrchestratorResponseType.Answered,
-    content: NO_RELIABLE_ANSWER,
-    reason,
-    errorCode,
-    retrievalDurationMs: retrievalMs,
-    latencyMs: Date.now() - started,
-    context: {
-      ...base.context,
-      conversationState: 'answered',
-      pendingClarification: null,
-      unsuccessfulAttempts: 0,
-    },
-  };
-}
 
 function isConversational(text: string): boolean {
   const trimmed = text.trim();

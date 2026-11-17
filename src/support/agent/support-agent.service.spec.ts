@@ -3,7 +3,6 @@ import { OrchestratorResponseType } from '../../common/enums/index.js';
 import { ActionStatus } from '../actions/actions.types.js';
 import { emptyContext } from '../intelligence/context/conversation-context.js';
 import { LlmError, type LlmToolDefinition } from '../llm/llm.types.js';
-import { NO_RELIABLE_ANSWER } from '../llm/prompts/index.js';
 import { SupportAgentService } from './support-agent.service.js';
 
 import type { SupportActor } from '../../common/auth/support-actor.js';
@@ -190,8 +189,19 @@ describe('SupportAgentService', () => {
     expect(result.context.pendingClarification).toBeNull();
   });
 
-  it('skips the model when retrieval finds nothing relevant', async () => {
-    const chat = vi.fn();
+  it('still calls the model on the light prompt when retrieval finds nothing', async () => {
+    const chat = vi.fn(async () => ({
+      message: {
+        role: 'assistant',
+        content:
+          'I focus on Blivap help — accounts, donations, bookings, and wallet. What do you need?',
+      },
+      toolCalls: [],
+      promptTokens: 8,
+      completionTokens: 12,
+      durationMs: 9,
+      model: 'qwen3:1.7b',
+    }));
     const agent = harness({
       retrieve: vi.fn(async () => ({
         chunks: [],
@@ -201,6 +211,7 @@ describe('SupportAgentService', () => {
         missingEmbeddings: 0,
         failed: false,
       })),
+      catalogEntries: [],
       chat,
     });
     const result = await agent.runTurn({
@@ -210,10 +221,9 @@ describe('SupportAgentService', () => {
       context: emptyContext(),
       history: [],
     });
-    expect(chat).not.toHaveBeenCalled();
+    expect(chat).toHaveBeenCalled();
     expect(result.outcome).toBe('answered');
-    expect(result.reason).toBe('no_relevant_knowledge');
-    expect(result.content).toBe(NO_RELIABLE_ANSWER);
+    expect(result.content.toLowerCase()).toMatch(/blivap/);
   });
 
   it('falls back when the model only leaked reasoning', async () => {
@@ -368,9 +378,9 @@ describe('SupportAgentService', () => {
       context: emptyContext(),
       history: [],
     });
-    expect(result.outcome).toBe('answered');
+    expect(result.outcome).toBe('temporary_error');
     expect(result.reason).toBe('llm_providers_failed');
-    expect(result.content).toBe(NO_RELIABLE_ANSWER);
+    expect(result.errorCode).toBe('runtime_unreachable');
   });
 
   it('runs a registered wallet tool then answers', async () => {

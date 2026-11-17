@@ -35,7 +35,12 @@ const user: SupportActor = {
   accessToken: 'blivap-access-token',
 };
 
-function harness() {
+function harness(options?: {
+  agent?: {
+    enabled: () => boolean;
+    runTurn: () => Promise<Record<string, unknown>>;
+  };
+}) {
   const messages: Array<Record<string, unknown>> = [];
   const escalations: EscalationRequest[] = [];
   const analytics: Array<{
@@ -194,12 +199,12 @@ function harness() {
         return null;
       },
     } as never,
-    {
+    (options?.agent ?? {
       enabled: () => false,
       runTurn: async () => {
         throw new Error('llm disabled in this test');
       },
-    } as never,
+    }) as never,
     {
       enabled: () => false,
       runTurn: async () => ({ outcome: 'fallback', reason: 'llm_disabled' }),
@@ -237,6 +242,76 @@ describe('support orchestrator', () => {
     expect(turn.content).toMatch(
       /^Hi — I’m Bliiva, Blivap’s official AI support assistant/,
     );
+  });
+
+  it('keeps greetings on the rules path even when the LLM is enabled', async () => {
+    let agentCalled = false;
+    const { orchestrator, conversation } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async () => {
+          agentCalled = true;
+          return {
+            outcome: 'temporary_error',
+            reason: 'llm_providers_failed',
+            errorCode: 'timeout',
+            content: '',
+            responseType: 'TEMPORARY_ERROR',
+            context: {},
+            knowledgeRefs: [],
+            chunks: [],
+            toolCalls: 0,
+            model: null,
+            promptTokens: null,
+            completionTokens: null,
+            latencyMs: 1,
+            retrievalDurationMs: 0,
+            escalate: false,
+            escalationReason: null,
+          };
+        },
+      },
+    });
+    const turn = await orchestrator.process(conversation, 'hi', user);
+    expect(agentCalled).toBe(false);
+    expect(turn.content).toMatch(
+      /^Hi — I’m Bliiva, Blivap’s official AI support assistant/,
+    );
+    expect(turn.content).not.toContain('support@blivap.com');
+  });
+
+  it('falls back to rules knowledge when the LLM times out', async () => {
+    const { orchestrator, conversation } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async () => ({
+          outcome: 'temporary_error',
+          reason: 'llm_providers_failed',
+          errorCode: 'timeout',
+          content: '',
+          responseType: 'TEMPORARY_ERROR',
+          context: {},
+          knowledgeRefs: [],
+          chunks: [],
+          toolCalls: 0,
+          model: null,
+          promptTokens: null,
+          completionTokens: null,
+          latencyMs: 1,
+          retrievalDurationMs: 0,
+          escalate: false,
+          escalationReason: null,
+        }),
+      },
+    });
+    const turn = await orchestrator.process(
+      conversation,
+      'what is blivap',
+      user,
+    );
+    expect(turn.content.toLowerCase()).toMatch(/blivap/);
+    expect(turn.content).not.toContain('support@blivap.com');
+    expect(turn.content).not.toContain('care@blivap.com');
   });
 
   it('uses a cached display name on greeting when already known', async () => {

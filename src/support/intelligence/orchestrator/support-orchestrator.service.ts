@@ -58,7 +58,6 @@ import {
 import { IntentCatalogService } from '../recognition/intent-catalog.service.js';
 import { RuleBasedRecognizerService } from '../recognition/rule-based-recognizer.service.js';
 import {
-  aiUnavailableMessage,
   composeResponse,
   ESCALATION_OFFER_QUESTION,
   temporaryErrorMessage,
@@ -406,8 +405,9 @@ export class SupportOrchestratorService {
       unsupportedActionReason,
     });
 
-    // Operational/safety turns stay on the rules path. All other chat must
-    // come from the AI when LLM_ENABLED=true — no canned greet/identity/KB copy.
+    // Operational/safety turns stay on the rules path. Product Q&A uses the
+    // LLM when enabled; greetings/identity/acks stay on rules so small Ollama
+    // hosts do not burn the timeout on "hi".
     const locked =
       baseDecision.kind === SupportDecisionKind.Emergency ||
       baseDecision.kind === SupportDecisionKind.Escalate ||
@@ -424,6 +424,14 @@ export class SupportOrchestratorService {
       pendingEscalateAffirm ||
       pendingEscalateReject ||
       pendingOfferAffirm;
+    // Pure greetings / acks / closings stay on rules. Identity ("what can you
+    // do") and small-talk still hit the LLM so the chat feels alive.
+    const lightRulesTurn =
+      pending.type === 'none' &&
+      !utterance.botIdentityAsk &&
+      ((utterance.greeting && !utterance.smallTalkOffTopic) ||
+        utterance.softAck ||
+        utterance.closing);
     const aiRequired = Boolean(this.agent?.enabled());
     if (
       aiRequired &&
@@ -431,7 +439,8 @@ export class SupportOrchestratorService {
       !pendingActionFlow &&
       !humanHandling &&
       !closed &&
-      pending.type === 'none'
+      pending.type === 'none' &&
+      !lightRulesTurn
     ) {
       const agentTurn = await this.tryAgent(
         conversation,
@@ -443,30 +452,14 @@ export class SupportOrchestratorService {
         recognition.intent,
       );
       if (agentTurn) return agentTurn;
+      // Model busy/timed out/ungrounded → Phase 2 rules (greetings, KB, actions).
       this.logger.warn(
         JSON.stringify({
-          event: 'support.ai.unavailable',
+          event: 'support.ai.fallback_to_rules',
           conversationId: conversation.id,
           reason: 'agent_no_answer',
         }),
       );
-      return this.finish(conversation, {
-        responseType: OrchestratorResponseType.TemporaryError,
-        content: aiUnavailableMessage(),
-        reference: null,
-        decision: null,
-        recognition: null,
-        context,
-        status: conversation.status,
-        category: conversation.category,
-        priority: conversation.priority,
-        assignedAgentId: conversation.assignedAgentId,
-        started: Date.now(),
-        userText: content,
-        safetyRedact: false,
-        lowScore: false,
-        extraMetadata: { source: 'llm', reason: 'ai_unavailable' },
-      });
     }
     let decision = pendingEscalateAffirm
       ? {
@@ -1091,35 +1084,14 @@ export class SupportOrchestratorService {
     ) {
       this.logger.warn(
         JSON.stringify({
-          event: 'support.ai.unavailable',
+          event: 'support.ai.fallback_to_rules',
           conversationId: conversation.id,
           outcome: result.outcome,
           reason: result.reason,
           errorCode: result.errorCode,
         }),
       );
-      return this.finish(conversation, {
-        responseType: OrchestratorResponseType.TemporaryError,
-        content: aiUnavailableMessage(),
-        reference: null,
-        decision: null,
-        recognition: null,
-        context,
-        status: conversation.status,
-        category: conversation.category,
-        priority: conversation.priority,
-        assignedAgentId: conversation.assignedAgentId,
-        started: Date.now(),
-        userText: content,
-        safetyRedact: false,
-        lowScore: false,
-        extraMetadata: {
-          source: 'llm',
-          reason: result.reason,
-          errorCode: result.errorCode,
-          model: result.model,
-        },
-      });
+      return null;
     }
 
     const offeringEscalation =
