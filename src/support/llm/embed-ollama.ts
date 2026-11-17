@@ -38,7 +38,11 @@ export function embeddedOllamaPlan(input: {
   if (input.totalBytes < MIN_BYTES) {
     return { start: false, reason: 'low-memory' };
   }
-  return { start: true, model: EMBEDDED_MODEL, baseUrl: 'http://127.0.0.1:11434' };
+  return {
+    start: true,
+    model: EMBEDDED_MODEL,
+    baseUrl: 'http://127.0.0.1:11434',
+  };
 }
 
 export function prepareEmbeddedOllama(input: {

@@ -57,7 +57,9 @@ describe('composeResponse fallback', () => {
     };
     const result = composeResponse(decision);
     expect(result.content.toLowerCase()).toContain('blivap');
-    expect(result.content.toLowerCase()).not.toContain('temporarily unavailable');
+    expect(result.content.toLowerCase()).not.toContain(
+      'temporarily unavailable',
+    );
     expect(result.content.toLowerCase()).not.toContain('support@blivap.com');
   });
 });

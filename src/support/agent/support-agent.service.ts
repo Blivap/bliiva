@@ -226,7 +226,8 @@ export class SupportAgentService {
       for (let round = 0; round <= llm.maxToolCalls; round += 1) {
         const response = await this.llm.chat({
           messages,
-          tools: useConversationalPrompt || tools.length === 0 ? undefined : tools,
+          tools:
+            useConversationalPrompt || tools.length === 0 ? undefined : tools,
           temperature: llm.temperature,
           maxOutputTokens,
         });
