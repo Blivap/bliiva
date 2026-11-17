@@ -21,7 +21,7 @@ export interface UtteranceSignals {
 }
 
 const GREETING_ONLY =
-  /^(hi|hello|hey|howdy|good morning|good afternoon|good evening|how are you|how are you doing|how is it going|hows it going|how s it going|what is up|whats up)( there)?$/;
+  /^(hi|hello|hey|howdy|good morning|good afternoon|good evening|how are you|how are you doing|how is it going|hows it going|how s it going|what is up|whats up)( there)?( bliiva| blivap)?$/;
 const GREETING_PREFIX =
   /^(hi|hello|hey|howdy|good morning|good afternoon|good evening)( there)?(?:\s+|[,!.]+)+/;
 /** Light presence / brand pings — reply like a greeting, not a hard redirect. */

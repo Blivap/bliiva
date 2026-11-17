@@ -24,6 +24,10 @@ describe('safety rules', () => {
     expect(inspectMessage('I want to talk to a human').humanRequested).toBe(
       true,
     );
+    expect(inspectMessage('connect me to a human').humanRequested).toBe(true);
+    expect(
+      inspectMessage('or connect me to a someone who can help').humanRequested,
+    ).toBe(true);
   });
 
   it('flags illegal off-platform requests without treating normal help as disallowed', () => {

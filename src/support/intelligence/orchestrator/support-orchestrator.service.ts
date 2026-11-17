@@ -58,12 +58,22 @@ import {
 import { IntentCatalogService } from '../recognition/intent-catalog.service.js';
 import { RuleBasedRecognizerService } from '../recognition/rule-based-recognizer.service.js';
 import {
+  renderSocialReply,
+  socialReplyGuide,
+  socialTurnOf,
+} from '../../llm/prompts/social-reply.js';
+import {
+  BARE_NO_REPLY,
+  BARE_YES_REPLY,
   composeResponse,
   ESCALATION_OFFER_QUESTION,
   temporaryErrorMessage,
+  unconfirmedActionHandoff,
 } from '../response/response-composer.js';
 import { KnowledgeRetrievalService } from '../retrieval/knowledge-retrieval.service.js';
+import { isAccountDeletionRequest } from '../text/account-deletion.js';
 import { extractEntities } from '../text/entities.js';
+import { isUnhelpfulLoop } from '../text/reply-loop.js';
 import { normalizeText } from '../text/text-normalizer.js';
 import { detectUtterance } from '../text/utterances.js';
 
@@ -387,6 +397,15 @@ export class SupportOrchestratorService {
       resolvedActionName = actionParams.followUpAction;
     }
 
+    // Deletion wins over a booking list hiding in the same message.
+    if (
+      isAccountDeletionRequest(normalized) ||
+      isAccountDeletionRequest(normalizeText(focusText))
+    ) {
+      resolvedActionName = null;
+      unsupportedActionReason = null;
+    }
+
     const baseDecision = this.decisions.decide({
       safety,
       recognition,
@@ -405,9 +424,9 @@ export class SupportOrchestratorService {
       unsupportedActionReason,
     });
 
-    // Operational/safety turns stay on the rules path. Product Q&A uses the
-    // LLM when enabled; greetings/identity/acks stay on rules so small Ollama
-    // hosts do not burn the timeout on "hi".
+    // Operational/safety turns stay on the rules path. Product questions,
+    // greetings, thanks, ok, and bye use the model when it is enabled.
+    // Social turns carry a reply shape so the model keeps Bliiva's format.
     const locked =
       baseDecision.kind === SupportDecisionKind.Emergency ||
       baseDecision.kind === SupportDecisionKind.Escalate ||
@@ -424,14 +443,27 @@ export class SupportOrchestratorService {
       pendingEscalateAffirm ||
       pendingEscalateReject ||
       pendingOfferAffirm;
-    // Pure greetings / acks / closings stay on rules. Identity ("what can you
-    // do") and small-talk still hit the LLM so the chat feels alive.
-    const lightRulesTurn =
+    const social =
+      pending.type === 'none' ? socialTurnOf(normalized, utterance) : null;
+    const knownName = context.recognizedEntities.userName ?? null;
+    const replyGuide = social ? socialReplyGuide(social, knownName) : null;
+    const pendingConfirmation =
+      Boolean(context.pendingConfirmationId) ||
+      context.pendingClarification?.kind === 'action_confirm' ||
+      context.pendingClarification?.kind === 'action_offer' ||
+      context.pendingClarification?.kind === 'escalation_confirm' ||
+      context.pendingClarification?.kind === 'action_resource';
+    const barePolarity =
+      !pendingConfirmation &&
+      !utterance.actionGoAhead &&
+      !safety.humanRequested &&
+      !safety.emergency &&
+      (utterance.affirmation || utterance.negation);
+    const replyLoop =
+      !humanHandling &&
+      !closed &&
       pending.type === 'none' &&
-      !utterance.botIdentityAsk &&
-      ((utterance.greeting && !utterance.smallTalkOffTopic) ||
-        utterance.softAck ||
-        utterance.closing);
+      isUnhelpfulLoop(context.previousBotResponse, context.lastBotResponse);
     const aiRequired = Boolean(this.agent?.enabled());
     if (
       aiRequired &&
@@ -440,8 +472,12 @@ export class SupportOrchestratorService {
       !humanHandling &&
       !closed &&
       pending.type === 'none' &&
-      !lightRulesTurn
+      !barePolarity &&
+      !replyLoop
     ) {
+      if (social === 'greeting' && !knownName && actor.isAuthenticated) {
+        void this.warmUserName(conversation.id, actor);
+      }
       const agentTurn = await this.tryAgent(
         conversation,
         content,
@@ -450,6 +486,7 @@ export class SupportOrchestratorService {
         recognition.intent ? context : { ...context, currentIntent: null },
         recognition.category,
         recognition.intent,
+        replyGuide,
       );
       if (agentTurn) return agentTurn;
       // Model busy/timed out/ungrounded → Phase 2 rules (greetings, KB, actions).
@@ -561,15 +598,62 @@ export class SupportOrchestratorService {
     let assignedAgentId = conversation.assignedAgentId;
     let status = conversation.status;
 
-    // Rules-only soft ack (LLM off): clear sticky intent without reopening topics.
-    // When LLM is on, soft acks are answered by the model above.
+    if (
+      replyLoop &&
+      decision.kind !== SupportDecisionKind.Escalate &&
+      decision.kind !== SupportDecisionKind.Emergency &&
+      decision.kind !== SupportDecisionKind.HumanHandling &&
+      decision.kind !== SupportDecisionKind.ClosedConversation
+    ) {
+      decision = {
+        ...baseDecision,
+        kind: SupportDecisionKind.Escalate,
+        responseType: OrchestratorResponseType.Escalated,
+        reason: 'reply_loop',
+        knowledge: null,
+        clarificationOptions: [],
+        escalationReason: 'reply_loop',
+        priority: Priority.Medium,
+        countsAsUnresolved: true,
+        appendDisclaimer: false,
+        actionName: null,
+      };
+    }
+
+    // Bare yes/no with nothing waiting in Redis is not a confirmation.
+    if (
+      barePolarity &&
+      !replyLoop &&
+      decision.kind !== SupportDecisionKind.Escalate &&
+      decision.kind !== SupportDecisionKind.Emergency &&
+      decision.kind !== SupportDecisionKind.HumanHandling &&
+      decision.kind !== SupportDecisionKind.ClosedConversation &&
+      decision.kind !== SupportDecisionKind.RunAction
+    ) {
+      decision = {
+        ...baseDecision,
+        kind: SupportDecisionKind.Answer,
+        responseType: OrchestratorResponseType.Answered,
+        reason: utterance.negation ? 'bare_no' : 'bare_yes',
+        knowledge: null,
+        clarificationOptions: [],
+        escalationReason: null,
+        countsAsUnresolved: false,
+        appendDisclaimer: false,
+        actionName: null,
+        intent: null,
+      };
+    }
+
+    // Soft ack stays on rules even when the model is enabled.
     const softAckIdle =
-      !aiRequired &&
       !humanHandling &&
       !closed &&
-      (utterance.softAck || utterance.affirmation) &&
+      utterance.softAck &&
+      !barePolarity &&
       pending.type === 'none' &&
-      !context.pendingClarification;
+      !context.pendingClarification &&
+      !context.pendingConfirmationId;
     if (
       softAckIdle &&
       decision.kind !== SupportDecisionKind.HumanHandling &&
@@ -604,8 +688,21 @@ export class SupportOrchestratorService {
           : decision.reason === 'follow_up_more_help'
             ? 'Sure — what else can I help you with on Blivap?'
             : decision.reason === 'soft_ack'
-              ? 'Alright — I’m here if you need anything on Blivap.'
-              : null;
+              ? renderSocialReply('ok', null)
+              : decision.reason === 'closing'
+                ? renderSocialReply(
+                    /^(thanks|thank you|thank you very much|ok thanks|okay thanks)$/.test(
+                      normalized,
+                    )
+                      ? 'thanks'
+                      : 'bye',
+                    null,
+                  )
+                : decision.reason === 'bare_yes'
+                ? BARE_YES_REPLY
+                : decision.reason === 'bare_no'
+                  ? BARE_NO_REPLY
+                  : null;
     let nextContextOverride: ConversationContextState | null = null;
 
     if (
@@ -859,7 +956,7 @@ export class SupportOrchestratorService {
       decision.kind === SupportDecisionKind.Escalate ||
       decision.kind === SupportDecisionKind.Emergency
     ) {
-      const recent = await this.messages.findRecent(conversation.id, 8);
+      const recent = await this.messages.findRecent(conversation.id, 40);
       try {
         const result = await this.escalation.escalate({
           conversationId: conversation.id,
@@ -874,6 +971,9 @@ export class SupportOrchestratorService {
           recentMessages: [...recent].reverse().map((message) => ({
             senderType: message.senderType,
             content: message.content,
+            createdAt: message.createdAt
+              ? new Date(message.createdAt).toISOString()
+              : undefined,
           })),
           knowledge: [
             ...context.presentedKnowledgeIds.map((id) => ({
@@ -943,7 +1043,11 @@ export class SupportOrchestratorService {
       context.specialistNotified;
     const composed = suppressBotMessage
       ? { content: '', knowledgeId: null, knowledgeTitle: null }
-      : composeResponse(decision, { ticketQueued, userName });
+      : composeResponse(decision, {
+          ticketQueued,
+          userName,
+          ticketNumber: reference,
+        });
     const contentOut = suppressBotMessage
       ? ''
       : (actionContent ?? composed.content);
@@ -1038,6 +1142,122 @@ export class SupportOrchestratorService {
     });
   }
 
+  private async finishUnconfirmedClaim(
+    conversation: OrchestratorConversation,
+    content: string,
+    actor: SupportActor,
+    context: ConversationContextState,
+    category: string | null,
+    recognizedIntent: string | null,
+    result: SupportAgentTurnResult,
+  ): Promise<OrchestratorTurn> {
+    let reference: string | null = null;
+    let assignedAgentId = conversation.assignedAgentId;
+    let status = ConversationStatus.Waiting;
+    try {
+      const recent = await this.messages.findRecent(conversation.id, 40);
+      const created = await this.escalation.escalate({
+        conversationId: conversation.id,
+        userId: conversation.userId,
+        category: category ?? conversation.category,
+        intent: recognizedIntent,
+        confidence: 0,
+        reason: 'unconfirmed_action_claim',
+        priority: Priority.High,
+        subject: content,
+        originalQuestion: content,
+        recentMessages: [...recent].reverse().map((message) => ({
+          senderType: message.senderType,
+          content: message.content,
+          createdAt: message.createdAt
+            ? new Date(message.createdAt).toISOString()
+            : undefined,
+        })),
+        knowledge: [],
+      });
+      reference = created.ticketNumber;
+      assignedAgentId = created.assignedAgentId;
+      status = created.assignedAgentId
+        ? ConversationStatus.Human
+        : ConversationStatus.Waiting;
+      await this.audit.createAudit({
+        action: 'support.escalated',
+        resourceType: 'ticket',
+        resourceId: new Types.ObjectId(created.ticketId),
+        actorId: actor.userId ? new Types.ObjectId(actor.userId) : null,
+        actorType: actor.isAuthenticated ? 'user' : 'guest',
+        metadata: {
+          reason: 'unconfirmed_action_claim',
+          intent: recognizedIntent,
+          ticketNumber: created.ticketNumber,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'support.escalation.failed',
+          conversationId: conversation.id,
+          message: error instanceof Error ? error.message : 'unknown',
+        }),
+      );
+    }
+    const reply = unconfirmedActionHandoff(reference);
+    return this.finish(conversation, {
+      responseType: OrchestratorResponseType.Escalated,
+      content: reply,
+      reference,
+      decision: {
+        kind: SupportDecisionKind.Escalate,
+        responseType: OrchestratorResponseType.Escalated,
+        reason: 'unconfirmed_action_claim',
+        intent: recognizedIntent,
+        category: category ?? conversation.category,
+        confidence: 0,
+        knowledge: null,
+        clarificationOptions: [],
+        escalationReason: 'unconfirmed_action_claim',
+        priority: Priority.High,
+        appendDisclaimer: false,
+        empathetic: false,
+        repeatedQuestion: false,
+        countsAsUnresolved: true,
+        actionName: null,
+        actionParams: {},
+        unsupportedActionReason: null,
+      },
+      recognition: null,
+      context: {
+        ...result.context,
+        currentIntent: null,
+        previousIntent: context.currentIntent,
+        lastUserMessage: content,
+        lastUserMessageNormalized: normalizeText(content),
+        previousBotResponse: context.lastBotResponse,
+        lastBotResponse: reply,
+        pendingClarification: null,
+        pendingActionName: null,
+        pendingActionParams: {},
+        pendingConfirmationId: null,
+        conversationState: 'escalated',
+        specialistNotified: true,
+        version: 1,
+      },
+      status,
+      category: category ?? conversation.category,
+      priority: Priority.High,
+      assignedAgentId,
+      started: Date.now() - result.latencyMs,
+      userText: content,
+      safetyRedact: false,
+      lowScore: false,
+      extraMetadata: {
+        source: 'rules',
+        reason: 'unconfirmed_action_claim',
+        model: result.model,
+      },
+    });
+  }
+
   private async tryAgent(
     conversation: OrchestratorConversation,
     content: string,
@@ -1045,6 +1265,7 @@ export class SupportOrchestratorService {
     context: ConversationContextState,
     category: string | null,
     recognizedIntent: string | null = null,
+    replyGuide: string | null = null,
   ): Promise<OrchestratorTurn | null> {
     // Handoff already started — never resume product help via the LLM.
     if (context.specialistNotified) {
@@ -1075,8 +1296,20 @@ export class SupportOrchestratorService {
       history,
       category,
       confirmationId: context.pendingConfirmationId ?? undefined,
+      replyGuide,
     });
     await this.recordLlmAnalytics(conversation.id, result);
+    if (result.reason === 'unconfirmed_action_claim') {
+      return this.finishUnconfirmedClaim(
+        conversation,
+        content,
+        actor,
+        context,
+        category,
+        recognizedIntent,
+        result,
+      );
+    }
     if (
       result.outcome === 'fallback' ||
       result.outcome === 'unavailable' ||
@@ -1135,6 +1368,7 @@ export class SupportOrchestratorService {
         previousIntent: context.currentIntent,
         lastUserMessage: content,
         lastUserMessageNormalized: normalizeText(content),
+        previousBotResponse: context.lastBotResponse,
         lastBotResponse: result.content,
         version: 1,
       },
@@ -1422,6 +1656,8 @@ export class SupportOrchestratorService {
       decision.kind === SupportDecisionKind.HumanHandling ||
       decision.kind === SupportDecisionKind.Greet ||
       decision.reason === 'soft_ack' ||
+      decision.reason === 'bare_yes' ||
+      decision.reason === 'bare_no' ||
       decision.reason === 'bot_identity' ||
       decision.reason === 'follow_up_more_help' ||
       decision.reason === 'follow_up_confirmed' ||
@@ -1430,6 +1666,8 @@ export class SupportOrchestratorService {
     if (
       decision.kind === SupportDecisionKind.Answer &&
       (decision.reason === 'soft_ack' ||
+        decision.reason === 'bare_yes' ||
+        decision.reason === 'bare_no' ||
         decision.reason === 'bot_identity' ||
         decision.reason === 'follow_up_more_help')
     ) {
@@ -1450,6 +1688,9 @@ export class SupportOrchestratorService {
         : (decision.intent ?? state.currentIntent),
       lastUserMessage: content,
       lastUserMessageNormalized: normalized,
+      previousBotResponse: response
+        ? state.lastBotResponse
+        : state.previousBotResponse,
       lastBotResponse: response || state.lastBotResponse,
       lastClarificationQuestion:
         decision.kind === SupportDecisionKind.Clarify

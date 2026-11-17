@@ -1,3 +1,4 @@
+import { isAccountDeletionRequest } from '../text/account-deletion.js';
 import { normalizeText } from '../text/text-normalizer.js';
 import type { UtteranceSignals } from '../text/utterances.js';
 
@@ -255,6 +256,7 @@ export function inferImmediateLiveDataAction(
   if (!userMessage) return null;
   const text = normalizeText(userMessage);
   if (!text) return null;
+  if (isAccountDeletionRequest(text)) return null;
   // Money mutations are confirm-gated — never auto-run as a balance read.
   if (
     /\b(withdraw|cash out|payout|top ?up|add money|fund (?:my )?wallet|transfer|refund)\b/.test(

@@ -33,16 +33,18 @@ function greetDecision(): SupportDecision {
 describe('composeResponse greeting', () => {
   it('includes the user name when provided', () => {
     const result = composeResponse(greetDecision(), { userName: 'Ada' });
-    expect(result.content).toBe(
-      'Hi Ada — I’m Bliiva, Blivap’s official AI support assistant. How can I help?',
-    );
+    expect(result.content).toContain('Hi Ada!');
+    expect(result.content).toContain("I'm **Bliiva**");
+    expect(result.content).toContain('**Account:**');
+    expect(result.content).toContain('What would you like help with today?');
   });
 
   it('falls back when no name is available', () => {
     const result = composeResponse(greetDecision());
-    expect(result.content).toBe(
-      'Hi — I’m Bliiva, Blivap’s official AI support assistant. How can I help?',
-    );
+    expect(result.content).toContain('Hi there!');
+    expect(result.content).toContain('**Donations:**');
+    expect(result.content).toContain('**Wallet:**');
+    expect(result.content).not.toContain('Hi Ada');
   });
 });
 

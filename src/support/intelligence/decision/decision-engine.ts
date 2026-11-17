@@ -228,6 +228,13 @@ export function decideSupportResponse(input: DecisionInput): SupportDecision {
     });
   }
 
+  // No delete-account tool exists. Ticket it before any booking lookup or model.
+  if (
+    recognition.intent === 'ACCOUNT_DELETION' ||
+    intent?.name === 'ACCOUNT_DELETION'
+  ) {
+    return escalate('account_deletion', Priority.High);
+  }
   if (safety.humanRequested || intent?.name === 'REQUEST_HUMAN') {
     return escalate('human_requested', Priority.Medium);
   }

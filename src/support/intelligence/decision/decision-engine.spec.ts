@@ -82,6 +82,20 @@ describe('decision engine', () => {
     expect(decision.escalationReason).toBe('repeated_failure');
   });
 
+  it('opens a ticket for account deletion instead of answering from knowledge', () => {
+    const decision = decide('delete my account');
+    expect(decision.kind).toBe(SupportDecisionKind.Escalate);
+    expect(decision.escalationReason).toBe('account_deletion');
+    expect(decision.priority).toBe('high');
+  });
+
+  it('handles account deletion before a booking ask in the same message', () => {
+    const decision = decide('close all my bookings and delete the account');
+    expect(decision.kind).toBe(SupportDecisionKind.Escalate);
+    expect(decision.intent).toBe('ACCOUNT_DELETION');
+    expect(decision.actionName).toBeNull();
+  });
+
   it('escalates an explicit human request even if another topic is present', () => {
     const decision = decide("I can't login, please talk to a human");
     expect(decision.kind).toBe(SupportDecisionKind.Escalate);

@@ -1,3 +1,4 @@
+import { renderSocialReply } from '../../llm/prompts/social-reply.js';
 import { CLINICAL_BOUNDARY_CATEGORIES } from '../../../common/constants/support-categories.js';
 import {
   SupportDecisionKind,
@@ -34,7 +35,11 @@ function listOptions(labels: string[]): string {
 
 export function composeResponse(
   decision: SupportDecision,
-  options: { ticketQueued?: boolean; userName?: string | null } = {},
+  options: {
+    ticketQueued?: boolean;
+    userName?: string | null;
+    ticketNumber?: string | null;
+  } = {},
 ): ComposedResponse {
   const empathy = decision.empathetic ? 'Sorry about that.' : null;
   const repeat = decision.repeatedQuestion ? 'Same answer as before:' : null;
@@ -144,6 +149,16 @@ export function composeResponse(
         knowledgeTitle: null,
       };
     case SupportDecisionKind.Escalate:
+      if (
+        decision.reason === 'account_deletion' ||
+        decision.escalationReason === 'account_deletion'
+      ) {
+        return {
+          content: accountDeletionReply(options.ticketNumber ?? null),
+          knowledgeId: null,
+          knowledgeTitle: null,
+        };
+      }
       return {
         content: join([
           empathy,
@@ -187,6 +202,10 @@ function handoff(reason: string, queued: boolean): string {
   switch (reason) {
     case 'human_requested':
       return `Connecting you to a human. ${queuedText}`;
+    case 'reply_loop':
+      return `I’m not getting this right from here. ${queuedText}`;
+    case 'unconfirmed_action_claim':
+      return `I can’t confirm that was done. ${queuedText}`;
     case 'security_incident':
       return `Thanks — don’t send passwords or codes here. ${queuedText}`;
     case 'unauthorized_transaction':
@@ -253,11 +272,43 @@ function unsupportedActionMessage(reason: string | null | undefined): string {
   }
 }
 
+export function accountDeletionReply(ticketNumber: string | null): string {
+  const opened = ticketNumber
+    ? `**What I've done:** opened a request for our team (ticket #${ticketNumber}).`
+    : `**What I've done:** I tried to open a request for our team, but it didn’t go through. Please email **support@blivap.com** or **care@blivap.com**.`;
+  return [
+    `I'm sorry to see you go 💚 I can't delete accounts from chat, and I don't want to say it's done when it isn't.`,
+    '',
+    opened,
+    '**What happens next:**',
+    `- A team member will contact you and may need to confirm it's really you`,
+    `- They'll explain what happens to any open bookings or wallet balance`,
+    '',
+    `You can also email **support@blivap.com** or **care@blivap.com** 🙏`,
+  ].join('\n');
+}
+
+export function unconfirmedActionHandoff(ticketNumber: string | null): string {
+  const ticket = ticketNumber
+    ? `I've opened a request for our team (ticket #${ticketNumber}).`
+    : `I couldn’t open a ticket just now. Please email **support@blivap.com** or **care@blivap.com**.`;
+  return [
+    `I can’t confirm that from here, and I don’t want to say it’s done when it isn’t.`,
+    '',
+    ticket,
+    '',
+    `A team member will check what actually happened.`,
+  ].join('\n');
+}
+
+export const BARE_YES_REPLY =
+  'Yes to what? 😊 Tell me what you’d like help with.';
+
+export const BARE_NO_REPLY =
+  'No to what? 😊 Tell me what you’d like help with.';
+
 function greetingMessage(userName?: string | null): string {
-  const name = sanitizeDisplayName(userName);
-  return name
-    ? `Hi ${name} — I’m Bliiva, Blivap’s official AI support assistant. How can I help?`
-    : 'Hi — I’m Bliiva, Blivap’s official AI support assistant. How can I help?';
+  return renderSocialReply('greeting', sanitizeDisplayName(userName));
 }
 
 function sanitizeDisplayName(value?: string | null): string | null {

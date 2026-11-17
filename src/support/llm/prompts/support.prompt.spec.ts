@@ -18,6 +18,9 @@ describe('buildSupportTurn', () => {
     expect(prompt).toContain('Donor registration');
     expect(prompt).toContain('Open Profile and complete the donor form.');
     expect(prompt).toContain('the provided tools');
+    expect(prompt).toContain(
+      'NEVER say an action is done, completed, deleted, cancelled, or submitted unless a tool result in THIS turn confirms it.',
+    );
     expect(prompt).not.toContain('search_knowledge');
     expect(prompt).not.toContain('get_donor_profile');
     expect(prompt).toContain('How do I register as a donor?');

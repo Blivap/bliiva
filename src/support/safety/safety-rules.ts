@@ -79,11 +79,14 @@ const CLINICAL = [
 ];
 
 const HUMAN = [
-  /\btalk to (a )?(human|person|agent|representative)\b/,
-  /\bspeak to (a )?(human|person|agent|representative)\b/,
+  /\btalk to (a )?(human|person|someone|somebody|agent|representative|specialist)\b/,
+  /\bspeak (to|with) (a )?(human|person|someone|somebody|agent|representative|specialist)\b/,
+  /\bconnect me (to|with) (a |an )?(human|person|someone|somebody|agent|representative|specialist)\b/,
+  /\b(get|put) me (through )?to (a )?(human|person|someone|agent|specialist)\b/,
   /\breal person\b/,
   /\bhuman (agent|support)\b/,
   /\bcustomer service agent\b/,
+  /\blive (agent|person|support)\b/,
 ];
 
 const FRUSTRATION =

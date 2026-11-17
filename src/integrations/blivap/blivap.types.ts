@@ -1,3 +1,5 @@
+import type { Priority } from '../../common/enums/index.js';
+
 export interface BlivapUserProfile {
   id: string;
   email: string;
@@ -352,4 +354,38 @@ export interface BlivapIntegrationPort {
   notifyUser(
     payload: BlivapNotificationRequest,
   ): Promise<{ accepted: boolean }>;
+
+  /**
+   * Ask Blivap to escalate. Blivap owns the escalation and the ticket.
+   */
+  escalateSupport(
+    payload: BlivapEscalateSupportRequest,
+  ): Promise<BlivapEscalateSupportResult>;
+}
+
+export interface BlivapEscalateSupportRequest {
+  conversationId: string;
+  userId: string | null;
+  category: string;
+  subject: string;
+  originalQuestion: string;
+  reason: string;
+  priority: string;
+  intent: string | null;
+  confidence: number | null;
+  recentMessages: Array<{
+    senderType: string;
+    content: string;
+    createdAt?: string;
+  }>;
+  knowledge: Array<{ id: string; title: string }>;
+}
+
+export interface BlivapEscalateSupportResult {
+  ticketId: string;
+  ticketNumber: string;
+  assignedAgentId: string | null;
+  priority: Priority;
+  status: string;
+  alreadyOpen: boolean;
 }

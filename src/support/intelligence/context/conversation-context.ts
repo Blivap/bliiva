@@ -40,6 +40,8 @@ export interface ConversationContextState {
   lastUserMessage: string | null;
   lastUserMessageNormalized: string | null;
   lastBotResponse: string | null;
+  /** Bot reply before lastBotResponse, used to break repeated answers. */
+  previousBotResponse: string | null;
   lastClarificationQuestion: string | null;
   pendingClarification: PendingClarification | null;
   recognizedEntities: Record<string, string>;
@@ -63,6 +65,7 @@ export function emptyContext(): ConversationContextState {
     lastUserMessage: null,
     lastUserMessageNormalized: null,
     lastBotResponse: null,
+    previousBotResponse: null,
     lastClarificationQuestion: null,
     pendingClarification: null,
     recognizedEntities: {},
@@ -89,6 +92,7 @@ export function readContext(raw: unknown): ConversationContextState {
     lastUserMessage: stringOrNull(record.lastUserMessage),
     lastUserMessageNormalized: stringOrNull(record.lastUserMessageNormalized),
     lastBotResponse: stringOrNull(record.lastBotResponse),
+    previousBotResponse: stringOrNull(record.previousBotResponse),
     lastClarificationQuestion: stringOrNull(record.lastClarificationQuestion),
     pendingClarification: readPending(record.pendingClarification),
     recognizedEntities: readEntities(record.recognizedEntities),
