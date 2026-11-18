@@ -38,7 +38,9 @@ const user: SupportActor = {
 function harness(options?: {
   agent?: {
     enabled: () => boolean;
-    runTurn: () => Promise<Record<string, unknown>>;
+    runTurn: (input: {
+      replyGuide?: string | null;
+    }) => Promise<Record<string, unknown>>;
   };
 }) {
   const messages: Array<Record<string, unknown>> = [];
