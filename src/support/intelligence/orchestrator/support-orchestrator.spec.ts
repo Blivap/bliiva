@@ -836,9 +836,7 @@ describe('support orchestrator', () => {
       turns.push(await orchestrator.process(current, prompt, user));
     }
     expect(agentCalled).toBe(2);
-    expect(escalations.some((item) => item.reason === 'reply_loop')).toBe(
-      true,
-    );
+    expect(escalations.some((item) => item.reason === 'reply_loop')).toBe(true);
     expect(turns[3]?.content).not.toContain(loop);
   });
 

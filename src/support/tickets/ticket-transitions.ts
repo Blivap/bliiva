@@ -44,10 +44,7 @@ const TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> = {
   [TicketStatus.Cancelled]: [],
 };
 
-export function canTransition(
-  from: TicketStatus,
-  to: TicketStatus,
-): boolean {
+export function canTransition(from: TicketStatus, to: TicketStatus): boolean {
   if (from === to) return true;
   return TRANSITIONS[from]?.includes(to) ?? false;
 }

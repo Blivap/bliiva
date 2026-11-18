@@ -323,11 +323,7 @@ export class SupportAgentService {
             // Fall through to model text / offer handling if force failed.
           }
 
-          if (
-            answer &&
-            claimsCompletedAction(answer) &&
-            !completionConfirmed
-          ) {
+          if (answer && claimsCompletedAction(answer) && !completionConfirmed) {
             return {
               ...base,
               outcome: 'answered',
