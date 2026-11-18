@@ -281,6 +281,44 @@ describe('support orchestrator', () => {
     expect(turn.content).not.toContain('support@blivap.com');
   });
 
+  it('sends a name question to the model with an identity shape', async () => {
+    let guide = '';
+    const { orchestrator, conversation } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async (input: { replyGuide?: string | null }) => {
+          guide = input.replyGuide ?? '';
+          return {
+            outcome: 'answered',
+            reason: 'llm_answer',
+            content: "I'm **Bliiva** 🩸, Blivap's support assistant.",
+            responseType: 'ANSWERED',
+            context: {},
+            knowledgeRefs: [],
+            chunks: [],
+            toolCalls: 0,
+            model: 'qwen3:1.7b',
+            promptTokens: 1,
+            completionTokens: 1,
+            latencyMs: 1,
+            retrievalDurationMs: 0,
+            escalate: false,
+            escalationReason: null,
+          };
+        },
+      },
+    });
+    const turn = await orchestrator.process(
+      conversation,
+      'what is your name',
+      user,
+    );
+    expect(guide).toContain('They asked who you are');
+    expect(guide).toContain("I'm **Bliiva**");
+    expect(guide).not.toContain("I'm not sure");
+    expect(turn.content).toContain("I'm **Bliiva**");
+  });
+
   it('uses the shaped greeting when the model cannot answer hi', async () => {
     let agentCalled = false;
     const { orchestrator, conversation } = harness({

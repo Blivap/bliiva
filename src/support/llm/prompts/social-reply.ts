@@ -4,7 +4,7 @@
  * The same text is the fallback when the model is unavailable.
  */
 
-export type SocialTurn = 'greeting' | 'thanks' | 'ok' | 'bye';
+export type SocialTurn = 'greeting' | 'thanks' | 'ok' | 'bye' | 'identity';
 
 const MENU = [
   '- 👤 **Account:** sign-up, sign-in, password, verification',
@@ -18,6 +18,16 @@ export function renderSocialReply(
   firstName: string | null,
 ): string {
   const name = firstName?.trim() || null;
+  if (kind === 'identity') {
+    return [
+      "I'm **Bliiva** 🩸, Blivap's support assistant.",
+      '',
+      'I can help you with:',
+      MENU,
+      '',
+      'What would you like help with today?',
+    ].join('\n');
+  }
   if (kind === 'greeting') {
     const hello = name ? `Hi ${name}!` : 'Hi there!';
     return [
@@ -67,9 +77,11 @@ export function socialReplyGuide(
   return [
     'REPLY SHAPE — write the customer reply in this shape.',
     'Keep the **bold** markers, emoji, and bullet lines.',
-    kind === 'bye'
-      ? 'End with "Take care." Do not add a question.'
-      : 'End with exactly one question. Do not add a second question.',
+    kind === 'identity'
+      ? 'They asked who you are. Answer with your name. Do not say you are not sure.'
+      : kind === 'bye'
+        ? 'End with "Take care." Do not add a question.'
+        : 'End with exactly one question. Do not add a second question.',
     name
       ? `Their first name is ${name}. Use it in the first line when the shape does.`
       : 'No first name is available. Do not invent one.',
@@ -90,13 +102,10 @@ export function socialTurnOf(
     smallTalkOffTopic: boolean;
   },
 ): SocialTurn | null {
-  if (
-    signals.botIdentityAsk ||
-    signals.greetingRemainder ||
-    signals.smallTalkOffTopic
-  ) {
+  if (signals.greetingRemainder || signals.smallTalkOffTopic) {
     return null;
   }
+  if (signals.botIdentityAsk) return 'identity';
   if (signals.greeting) return 'greeting';
   if (signals.softAck) return 'ok';
   if (!signals.closing) return null;
