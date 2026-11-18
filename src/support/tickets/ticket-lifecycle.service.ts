@@ -26,10 +26,7 @@ import { AgentsRepository } from '../agents/agents.repository.js';
 import { AuditRepository } from '../audit/audit.repository.js';
 import { MessagesRepository } from '../messages/messages.repository.js';
 import { presentMessage } from '../messages/present-message.js';
-import {
-  assertTransition,
-  isWaitingStatus,
-} from './ticket-transitions.js';
+import { assertTransition, isWaitingStatus } from './ticket-transitions.js';
 import { TicketsRepository } from './tickets.repository.js';
 import type { SupportTicketDocument } from './schemas/ticket.schema.js';
 
@@ -175,8 +172,7 @@ export class TicketLifecycleService {
     for (const ticket of waiting) {
       await this.applyStatus(systemActor(), ticket, {
         status: TicketStatus.Resolved,
-        resolution:
-          'Automatically resolved after 72 hours with no user reply.',
+        resolution: 'Automatically resolved after 72 hours with no user reply.',
         note: 'auto_waiting_on_user_timeout',
       });
       changed += 1;
@@ -225,7 +221,9 @@ export class TicketLifecycleService {
     try {
       assertTransition(from, to);
     } catch {
-      throw new BadRequestException(`Invalid ticket transition: ${from} → ${to}`);
+      throw new BadRequestException(
+        `Invalid ticket transition: ${from} → ${to}`,
+      );
     }
 
     const now = new Date();
@@ -271,7 +269,8 @@ export class TicketLifecycleService {
       patch.waitingSince = now;
     } else if (isWaitingStatus(from) && ticket.waitingSince) {
       const spent = now.getTime() - new Date(ticket.waitingSince).getTime();
-      patch.waitingDurationMs = (ticket.waitingDurationMs ?? 0) + Math.max(0, spent);
+      patch.waitingDurationMs =
+        (ticket.waitingDurationMs ?? 0) + Math.max(0, spent);
       patch.waitingSince = null;
     }
 
@@ -427,9 +426,7 @@ export class TicketLifecycleService {
       priority: normalizePriority(String(doc.priority)),
       status,
       source: doc.source,
-      assignedAgentId: doc.assignedAgentId
-        ? String(doc.assignedAgentId)
-        : null,
+      assignedAgentId: doc.assignedAgentId ? String(doc.assignedAgentId) : null,
       resolution: doc.resolution ?? null,
       escalationReason: doc.escalationReason ?? null,
       cancelReason: doc.cancelReason ?? null,

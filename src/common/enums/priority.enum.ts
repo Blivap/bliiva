@@ -8,7 +8,9 @@ export enum Priority {
 /** @deprecated Prefer Priority.Medium — kept for callers that still say "normal". */
 export const PriorityNormal = Priority.Medium;
 
-export function normalizePriority(value: string | Priority | null | undefined): Priority {
+export function normalizePriority(
+  value: string | Priority | null | undefined,
+): Priority {
   const raw = String(value ?? '')
     .trim()
     .toLowerCase();

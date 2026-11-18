@@ -194,7 +194,7 @@ export class SupportAgentService {
             role: 'user',
             content: input.replyGuide
               ? `Customer: ${redactedUser}\nFollow the REPLY SHAPE. Keep the bold, bullets, and emojis.`
-              : `Customer: ${redactedUser}\nReply as Bliiva in one or two short sentences only.`,
+              : `Customer: ${redactedUser}\nAnswer as Bliiva in one or two short sentences. If you understand the question, answer it. If they ask your name or who you are, say you are Bliiva, Blivap's support assistant. Only when the words make no sense, ask them to be more specific and do not introduce yourself.`,
           },
         ]
       : [
@@ -323,11 +323,7 @@ export class SupportAgentService {
             // Fall through to model text / offer handling if force failed.
           }
 
-          if (
-            answer &&
-            claimsCompletedAction(answer) &&
-            !completionConfirmed
-          ) {
+          if (answer && claimsCompletedAction(answer) && !completionConfirmed) {
             return {
               ...base,
               outcome: 'answered',

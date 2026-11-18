@@ -699,10 +699,10 @@ export class SupportOrchestratorService {
                     null,
                   )
                 : decision.reason === 'bare_yes'
-                ? BARE_YES_REPLY
-                : decision.reason === 'bare_no'
-                  ? BARE_NO_REPLY
-                  : null;
+                  ? BARE_YES_REPLY
+                  : decision.reason === 'bare_no'
+                    ? BARE_NO_REPLY
+                    : null;
     let nextContextOverride: ConversationContextState | null = null;
 
     if (

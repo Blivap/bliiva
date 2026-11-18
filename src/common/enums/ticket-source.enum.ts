@@ -20,7 +20,9 @@ export enum TicketSource {
   Other = 'other',
 }
 
-export function ticketSourceFromReason(reason: string | null | undefined): TicketSource {
+export function ticketSourceFromReason(
+  reason: string | null | undefined,
+): TicketSource {
   const key = (reason ?? '').trim().toLowerCase();
   const map: Record<string, TicketSource> = {
     human_requested: TicketSource.HumanRequested,

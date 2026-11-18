@@ -38,7 +38,9 @@ const user: SupportActor = {
 function harness(options?: {
   agent?: {
     enabled: () => boolean;
-    runTurn: () => Promise<Record<string, unknown>>;
+    runTurn: (input: {
+      replyGuide?: string | null;
+    }) => Promise<Record<string, unknown>>;
   };
 }) {
   const messages: Array<Record<string, unknown>> = [];
@@ -279,6 +281,44 @@ describe('support orchestrator', () => {
     expect(guide).toContain('What would you like help with today?');
     expect(turn.content).toContain("I'm **Bliiva**");
     expect(turn.content).not.toContain('support@blivap.com');
+  });
+
+  it('sends a name question to the model with an identity shape', async () => {
+    let guide = '';
+    const { orchestrator, conversation } = harness({
+      agent: {
+        enabled: () => true,
+        runTurn: async (input: { replyGuide?: string | null }) => {
+          guide = input.replyGuide ?? '';
+          return {
+            outcome: 'answered',
+            reason: 'llm_answer',
+            content: "I'm **Bliiva** 🩸, Blivap's support assistant.",
+            responseType: 'ANSWERED',
+            context: {},
+            knowledgeRefs: [],
+            chunks: [],
+            toolCalls: 0,
+            model: 'qwen3:1.7b',
+            promptTokens: 1,
+            completionTokens: 1,
+            latencyMs: 1,
+            retrievalDurationMs: 0,
+            escalate: false,
+            escalationReason: null,
+          };
+        },
+      },
+    });
+    const turn = await orchestrator.process(
+      conversation,
+      'what is your name',
+      user,
+    );
+    expect(guide).toContain('They asked who you are');
+    expect(guide).toContain("I'm **Bliiva**");
+    expect(guide).not.toContain("I'm not sure");
+    expect(turn.content).toContain("I'm **Bliiva**");
   });
 
   it('uses the shaped greeting when the model cannot answer hi', async () => {
@@ -798,9 +838,7 @@ describe('support orchestrator', () => {
       turns.push(await orchestrator.process(current, prompt, user));
     }
     expect(agentCalled).toBe(2);
-    expect(escalations.some((item) => item.reason === 'reply_loop')).toBe(
-      true,
-    );
+    expect(escalations.some((item) => item.reason === 'reply_loop')).toBe(true);
     expect(turns[3]?.content).not.toContain(loop);
   });
 

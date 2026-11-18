@@ -21,6 +21,15 @@ describe('buildSupportTurn', () => {
     expect(prompt).toContain(
       'NEVER say an action is done, completed, deleted, cancelled, or submitted unless a tool result in THIS turn confirms it.',
     );
+    expect(prompt).toContain(
+      'Answer any question you understand. Your name, who you are, greetings, and clear Blivap questions are understood: answer them.',
+    );
+    expect(prompt).toContain(
+      'Then do not guess, assume, or answer a different question. Do not introduce yourself. Do not say "I\'m Bliiva" or "AI support assistant". Do not offer account, donations, bookings, or wallet.',
+    );
+    expect(prompt).toContain(
+      'If it names no topic, ask them to say it more specifically.',
+    );
     expect(prompt).not.toContain('search_knowledge');
     expect(prompt).not.toContain('get_donor_profile');
     expect(prompt).toContain('How do I register as a donor?');
